@@ -12,6 +12,7 @@ export interface ICloudProvider {
     clientId?: string;
     clientSecret?: string;
     pcloudToken?: string;
+    pcloudUseEU?: string;
     msAccessToken?: string;
     msRefreshToken?: string;
     s3AccessKey?: string;
@@ -45,6 +46,7 @@ const CloudProviderSchema = new Schema<ICloudProvider>(
       clientId: String,
       clientSecret: String,
       pcloudToken: String,
+      pcloudUseEU: String,
       msAccessToken: String,
       msRefreshToken: String,
       s3AccessKey: String,

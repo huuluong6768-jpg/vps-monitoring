@@ -2,6 +2,7 @@ import type { ICloudClient } from './types';
 import type { ICloudProvider } from '@/lib/models/CloudProvider';
 import { GoogleDriveClient } from './google-drive';
 import { S3Client } from './s3';
+import { PCloudClient } from './pcloud';
 import { decrypt } from '@/lib/encryption';
 
 export type { ICloudClient, CloudFile, CloudQuota, CloudUploadResult } from './types';
@@ -38,6 +39,11 @@ export function createCloudClient(provider: ICloudProvider): ICloudClient {
       });
 
     case 'pcloud':
+      return new PCloudClient({
+        accessToken: safeDecrypt(creds.pcloudToken),
+        useEU: creds.pcloudUseEU === 'true',
+      });
+
     case 'onedrive':
       throw new Error(`Cloud provider type '${provider.type}' is not yet implemented`);
 

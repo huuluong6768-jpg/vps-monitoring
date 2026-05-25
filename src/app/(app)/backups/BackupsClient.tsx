@@ -50,6 +50,7 @@ export function BackupsClient() {
     fetcher,
   );
   const [showAddS3, setShowAddS3] = useState(false);
+  const [showAddPCloud, setShowAddPCloud] = useState(false);
   const [s3Form, setS3Form] = useState({
     name: '',
     accessKey: '',
@@ -57,6 +58,11 @@ export function BackupsClient() {
     bucket: '',
     region: 'us-east-1',
     endpoint: '',
+  });
+  const [pcloudForm, setPcloudForm] = useState({
+    name: '',
+    accessToken: '',
+    useEU: false,
   });
   const [saving, setSaving] = useState(false);
 
@@ -96,6 +102,37 @@ export function BackupsClient() {
     await fetch(`/api/cloud/providers/${id}`, { method: 'DELETE' });
     toast.success('Provider deleted');
     mutate();
+  };
+
+  const addPCloudProvider = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/cloud/providers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: pcloudForm.name || 'pCloud Storage',
+          type: 'pcloud',
+          credentials: {
+            pcloudToken: pcloudForm.accessToken,
+            pcloudUseEU: pcloudForm.useEU,
+          },
+        }),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        toast.success('pCloud provider added');
+        setShowAddPCloud(false);
+        setPcloudForm({ name: '', accessToken: '', useEU: false });
+        mutate();
+      } else {
+        toast.error(json.error || 'Failed to add provider');
+      }
+    } catch {
+      toast.error('Failed to add provider');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const addS3Provider = async () => {
@@ -151,13 +188,86 @@ export function BackupsClient() {
           Connect Google Drive
         </button>
         <button
-          onClick={() => setShowAddS3(!showAddS3)}
+          onClick={() => { setShowAddPCloud(!showAddPCloud); setShowAddS3(false); }}
+          className="flex items-center gap-2 rounded-lg border border-border bg-bg-soft px-4 py-2.5 text-sm font-medium text-ink hover:bg-bg-muted"
+        >
+          <CloudUpload className="h-4 w-4" />
+          Add pCloud
+        </button>
+        <button
+          onClick={() => { setShowAddS3(!showAddS3); setShowAddPCloud(false); }}
           className="flex items-center gap-2 rounded-lg border border-border bg-bg-soft px-4 py-2.5 text-sm font-medium text-ink hover:bg-bg-muted"
         >
           <HardDrive className="h-4 w-4" />
           Add S3 / MinIO
         </button>
       </div>
+
+      {/* pCloud Form */}
+      {showAddPCloud && (
+        <div className="rounded-xl border border-border bg-bg-soft p-6">
+          <h3 className="mb-4 text-lg font-semibold text-ink">Add pCloud Storage</h3>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-sm text-ink-muted">Name</label>
+              <input
+                type="text"
+                value={pcloudForm.name}
+                onChange={(e) => setPcloudForm({ ...pcloudForm, name: e.target.value })}
+                placeholder="My pCloud"
+                className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-ink"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm text-ink-muted">Access Token</label>
+              <input
+                type="password"
+                value={pcloudForm.accessToken}
+                onChange={(e) => setPcloudForm({ ...pcloudForm, accessToken: e.target.value })}
+                placeholder="Paste your pCloud access token"
+                className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-ink"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="flex items-center gap-2 text-sm text-ink-muted">
+                <input
+                  type="checkbox"
+                  checked={pcloudForm.useEU}
+                  onChange={(e) => setPcloudForm({ ...pcloudForm, useEU: e.target.checked })}
+                  className="rounded border-border"
+                />
+                Use EU data center (eapi.pcloud.com)
+              </label>
+            </div>
+          </div>
+          <div className="mt-4 flex gap-3">
+            <button
+              onClick={addPCloudProvider}
+              disabled={saving || !pcloudForm.accessToken}
+              className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+            >
+              {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              Add Provider
+            </button>
+            <button
+              onClick={() => setShowAddPCloud(false)}
+              className="rounded-lg px-4 py-2 text-sm text-ink-muted hover:text-ink"
+            >
+              Cancel
+            </button>
+          </div>
+          <p className="mt-3 text-xs text-ink-soft">
+            Get your access token from{' '}
+            <a href="https://docs.pcloud.com/methods/oauth_2.0/authorize.html" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+              pCloud OAuth2
+            </a>
+            {' '}or{' '}
+            <a href="https://my.pcloud.com/#page=settings&settings=tab-apps" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+              pCloud App Settings
+            </a>
+          </p>
+        </div>
+      )}
 
       {/* S3 Form */}
       {showAddS3 && (

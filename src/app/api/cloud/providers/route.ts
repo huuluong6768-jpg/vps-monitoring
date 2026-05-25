@@ -19,6 +19,8 @@ const createSchema = z.object({
       s3Bucket: z.string().optional(),
       s3Region: z.string().optional(),
       s3Endpoint: z.string().optional(),
+      pcloudToken: z.string().optional(),
+      pcloudUseEU: z.boolean().optional(),
     })
     .optional(),
 });
@@ -75,12 +77,18 @@ export async function POST(req: Request) {
     creds.s3Endpoint = c.s3Endpoint;
   }
 
+  if (parsed.data.type === 'pcloud' && parsed.data.credentials) {
+    const c = parsed.data.credentials;
+    if (c.pcloudToken) creds.pcloudToken = encrypt(c.pcloudToken);
+    creds.pcloudUseEU = c.pcloudUseEU ? 'true' : 'false';
+  }
+
   const provider = await CloudProvider.create({
     name: parsed.data.name,
     type: parsed.data.type,
     folderPath: parsed.data.folderPath || '/VPS-Backups',
     credentials: creds,
-    status: parsed.data.type === 's3' ? 'connected' : 'disconnected',
+    status: (parsed.data.type === 's3' || parsed.data.type === 'pcloud') ? 'connected' : 'disconnected',
   });
 
   return NextResponse.json({
