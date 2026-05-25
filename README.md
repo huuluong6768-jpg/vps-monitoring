@@ -10,6 +10,50 @@
 
 ---
 
+## Screenshots
+
+### Dashboard — Tổng quan toàn bộ fleet
+
+![Dashboard](docs/images/dashboard.png)
+
+### Settings — Kết nối API Server + Test kết nối
+
+![Settings API Test](docs/images/settings-api-test.png)
+
+### Settings — Hướng dẫn kết nối khi tách riêng Server và UI
+
+![Settings API Guide](docs/images/settings-api-guide.png)
+
+### Backups — Cloud Providers (Google Drive, pCloud, S3/MinIO)
+
+![Backups](docs/images/backups.png)
+
+### Clone & DR — Disaster Recovery (Disk Image + Rsync)
+
+![Clone & DR](docs/images/clone-dr.png)
+
+### Groups — Nhóm server
+
+![Groups](docs/images/groups.png)
+
+### Servers — Danh sách server
+
+![Servers](docs/images/servers.png)
+
+### Add Server — Thêm server mới (one-line install)
+
+![Add Server](docs/images/add-server.png)
+
+### Backups — Hướng dẫn lấy pCloud Token
+
+![pCloud Guide](docs/images/backups-pcloud-guide.png)
+
+### Login
+
+![Login](docs/images/login.png)
+
+---
+
 ## Features
 
 - **One-line install** on any VPS (Ubuntu, Debian, CentOS, Rocky, Alma, Fedora, Arch, Alpine…)
@@ -19,8 +63,10 @@
 - **Cloud Backup** — Google Drive, pCloud, S3/MinIO, OneDrive. Schedule daily or manual backups.
 - **Full Server Clone & DR** — Disk image (dd) + rsync incremental backup. Clone server A → server B.
 - **Server Groups** — Organize servers into logical groups.
+- **Kết nối API Server** — Test kết nối API từ UI, hướng dẫn 3 cách deploy khi tách riêng Server và UI.
 - **Telegram Bot** — Interactive bot with command menu (`/status`, `/servers`, `/alerts`, `/backup`).
 - **Telegram Alerts** — Notifications when CPU, RAM, or disk usage crosses thresholds.
+- **Token Guides trên UI** — Hướng dẫn lấy token pCloud (Terminal/PowerShell/Browser + 2FA) và Google Drive (OAuth2) ngay trên giao diện.
 - **Single-admin model** — no public sign-ups. The first account becomes admin.
 - **Self-hosted** — your metrics live in your MongoDB, not someone else's cloud.
 - **Tiny agent** — pure bash, no compiled binaries, ~5 MB RAM footprint.
@@ -130,7 +176,11 @@ Visit `http://localhost:3000` for UI and `http://localhost:4000` for API.
 
 ## Kết nối API Server với UI khi deploy riêng
 
-Khi tách API và UI ra 2 server khác nhau:
+Khi tách API và UI ra 2 server khác nhau, có 3 cách kết nối:
+
+> **Tip:** Vào **Settings** trên dashboard → mục **"Kết nối API Server"** để test kết nối và xem hướng dẫn chi tiết ngay trên UI.
+
+![Settings — Kết nối API Server](docs/images/settings-api-test.png)
 
 ### Cách 1: Reverse Proxy (khuyên dùng)
 
@@ -190,6 +240,8 @@ WEB_ORIGINS=https://monitor.yourdomain.com,http://localhost:3000
 NEXT_PUBLIC_APP_URL=https://monitor.yourdomain.com
 ```
 
+**Test kết nối:** Vào Settings → "Kết nối API Server" → paste `https://api.monitor.yourdomain.com` → nhấn "Test" để kiểm tra.
+
 ### Cách 3: Docker Compose (2 containers)
 
 ```yaml
@@ -246,6 +298,8 @@ volumes:
 
 In the dashboard, click **Add server**. Copy the install command and run it on your VPS:
 
+![Add Server](docs/images/add-server.png)
+
 ```bash
 curl -fsSL https://monitor.yourdomain.com/api/install | sudo bash
 ```
@@ -270,11 +324,15 @@ sudo /opt/vps-monitor-agent/uninstall.sh   # remove
 
 Hỗ trợ 3 cloud provider: **Google Drive**, **pCloud**, **S3/MinIO**.
 
+![Backups Page](docs/images/backups.png)
+
 ### pCloud
 
 1. Vào trang **Backups** → Click **"Add pCloud"**
 2. Nhập tên và Access Token
 3. Hướng dẫn lấy token có sẵn ngay trong form (click "Hướng dẫn lấy Access Token")
+
+![pCloud Token Guide](docs/images/backups-pcloud-guide.png)
 
 **Cách lấy pCloud token nhanh:**
 ```bash
@@ -314,6 +372,8 @@ curl "https://api.pcloud.com/tfa_login?token=TOKEN_TU_BUOC_1&code=MA_2FA_6_SO"
 
 Hỗ trợ 2 chế độ backup toàn bộ server:
 
+![Clone & DR Page](docs/images/clone-dr.png)
+
 ### Full Disk Image (cho DR, chạy weekly)
 - Agent dùng `dd` + `pigz`/`zstd` tạo disk image
 - Split thành chunks → upload lên cloud
@@ -336,6 +396,8 @@ Hỗ trợ 2 chế độ backup toàn bộ server:
 ## Server Groups
 
 Organize servers vào nhóm logic (VD: Production, Staging, Database servers).
+
+![Groups Page](docs/images/groups.png)
 
 - Vào **Groups** → Create group → đặt tên + mô tả
 - Assign servers vào groups
@@ -377,6 +439,38 @@ Bot gửi alert tự động khi:
 - CPU, RAM, hoặc Disk vượt ngưỡng
 - Server mất kết nối (offline/shutdown)
 
+Chi tiết: [docs/telegram-bot-setup.md](docs/telegram-bot-setup.md)
+
+---
+
+## Settings
+
+Trang Settings quản lý toàn bộ cấu hình dashboard:
+
+![Settings Page](docs/images/settings.png)
+
+| Section | Mô tả |
+|---------|--------|
+| **Appearance** | Chuyển đổi dark/light theme |
+| **Account** | Thông tin tài khoản admin |
+| **Change password** | Đổi mật khẩu |
+| **Telegram** | Cấu hình bot token, chat ID, ngưỡng cảnh báo, cooldown |
+| **Kết nối API Server** | Xem API URL hiện tại, test kết nối, hướng dẫn deploy |
+| **Dashboard** | App URL, offline threshold |
+
+### Test kết nối API Server
+
+Khi tách riêng API và UI, vào **Settings** → mục **"Kết nối API Server"**:
+
+1. Xem API URL hiện tại (VD: `http://localhost:4000`)
+2. Paste URL API server mới vào ô **"Test kết nối API"**
+3. Nhấn **"Test"** → kết quả hiện ngay:
+   - **Thành công**: hiện version + uptime (màu xanh)
+   - **Lỗi**: hiện thông báo lỗi (màu đỏ)
+4. Click **"Hướng dẫn kết nối khi tách riêng Server và UI"** để xem 3 cách deploy chi tiết
+
+![Settings API Guide](docs/images/settings-api-guide.png)
+
 ---
 
 ## Environment Variables
@@ -397,6 +491,13 @@ Bot gửi alert tự động khi:
 ---
 
 ## API Endpoints
+
+### Health Check
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/health` | public | Server health check (version, uptime). CORS `*` cho phép test từ bất kỳ domain |
+| GET | `/api/health/db` | public | Database connectivity check |
 
 ### Authentication
 
@@ -462,6 +563,23 @@ Bot gửi alert tự động khi:
 
 ---
 
+## UI Pages
+
+| Trang | Đường dẫn | Mô tả |
+|-------|-----------|--------|
+| Dashboard | `/dashboard` | Tổng quan fleet: CPU, RAM, Disk, Network, danh sách server |
+| Servers | `/servers` | Danh sách tất cả server đã đăng ký |
+| Server Detail | `/servers/:id` | Chi tiết 1 server: metrics real-time, charts |
+| Add Server | `/servers/add` | Thêm server mới (copy install command) |
+| Groups | `/groups` | Quản lý nhóm server (CRUD) |
+| Clone & DR | `/clone` | Clone config, backup snapshots, restore wizard |
+| Backups | `/backups` | Cloud providers (Google Drive, pCloud, S3) |
+| Settings | `/settings` | Tài khoản, theme, Telegram, API connection, dashboard info |
+| Login | `/login` | Đăng nhập admin |
+| Install Guide | `/docs` | Hướng dẫn cài agent |
+
+---
+
 ## Security Notes
 
 - The first user created via `/setup` is the only admin. Public registration is **disabled**.
@@ -469,6 +587,15 @@ Bot gửi alert tự động khi:
 - Always run the dashboard behind HTTPS (e.g. Caddy, Nginx, Traefik).
 - Set a strong `JWT_SECRET` (`openssl rand -hex 64`).
 - Cloud provider credentials are encrypted with AES-256-GCM before storing in MongoDB.
+
+---
+
+## Documentation
+
+| Tài liệu | Đường dẫn | Mô tả |
+|-----------|-----------|--------|
+| Deployment Guide | [docs/deployment-guide.md](docs/deployment-guide.md) | 4 cách deploy + hướng dẫn kết nối API/UI |
+| Telegram Bot Setup | [docs/telegram-bot-setup.md](docs/telegram-bot-setup.md) | Hướng dẫn tạo bot + cấu hình + lệnh |
 
 ---
 

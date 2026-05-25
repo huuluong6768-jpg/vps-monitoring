@@ -70,11 +70,13 @@ Ngoài các lệnh thủ công, bot còn tự động gửi thông báo khi:
 ## Troubleshooting
 
 ### Bot không phản hồi
-- Kiểm tra API server đang chạy (`curl http://localhost:4000/api/health`)
+- Kiểm tra API server đang chạy: `curl http://localhost:4000/api/health`
+  - Response OK: `{"ok":true,"service":"vps-monitoring-api","version":"1.0.0","uptime":...}`
 - Kiểm tra bot token đúng (không có khoảng trắng thừa)
 - Restart API server sau khi thay đổi token
+- Vào **Settings** → "Kết nối API Server" → nhấn **Test** để kiểm tra API hoạt động
 
 ### Alert không gửi
 - Kiểm tra Chat ID đúng
-- Click "Send Test" trong Settings để test
+- Click "Gửi tin thử" trong Settings để test
 - Kiểm tra cooldown chưa hết (mặc định 5 phút giữa các alert)

@@ -100,6 +100,18 @@ EOF
 pm2 start "cd packages/web && npx next start" --name vps-web
 ```
 
+### Test kết nối từ UI
+
+Sau khi deploy, vào **Settings** → mục **"Kết nối API Server"**:
+
+1. Kiểm tra API URL hiện tại có đúng không
+2. Paste URL API server vào ô **"Test kết nối API"**
+3. Nhấn **"Test"** → kết quả hiện ngay:
+   - **Thành công**: `Kết nối thành công — v1.0.0, uptime XXs` (màu xanh)
+   - **Lỗi**: hiện thông báo lỗi (màu đỏ)
+
+![Settings API Test](images/settings-api-test.png)
+
 ### Reverse Proxy (Nginx)
 
 ```nginx
@@ -151,6 +163,7 @@ Web UI có thể deploy lên Vercel miễn phí, API server vẫn chạy trên V
    - `NEXT_PUBLIC_APP_URL=https://your-app.vercel.app`
    - `MONGODB_URI=...`
    - `JWT_SECRET=...`
+5. Trên VPS (API server), set `WEB_ORIGINS=https://your-app.vercel.app` để cho phép CORS
 
 ---
 
@@ -185,6 +198,55 @@ sudo certbot --nginx -d monitor.yourdomain.com
 | `JWT_SECRET` | Có (prod) | Secret cho JWT/session cookies. **Phải giống nhau** trên API và Web |
 | `NEXT_PUBLIC_APP_URL` | Có | URL public truy cập dashboard |
 | `API_PORT` | Không | Port cho API server (mặc định 4000) |
-| `API_URL` | Không | URL API server (Next.js proxy target) |
-| `WEB_ORIGINS` | Không | CORS allowed origins |
+| `API_URL` | Không | URL API server (Next.js proxy target, mặc định `http://localhost:4000`) |
+| `WEB_ORIGINS` | Không | CORS allowed origins (mặc định `http://localhost:3000`) |
 | `AGENT_OFFLINE_AFTER_SECONDS` | Không | Thời gian trước khi đánh agent offline (mặc định 60s) |
+| `GOOGLE_CLIENT_ID` | Không | Google OAuth2 Client ID |
+| `GOOGLE_CLIENT_SECRET` | Không | Google OAuth2 Client Secret |
+| `BACKUP_ENCRYPTION_KEY` | Không | AES key mã hóa cloud credentials (mặc định = JWT_SECRET) |
+
+---
+
+## Health Check Endpoint
+
+API server cung cấp endpoint `/api/health` để kiểm tra kết nối:
+
+```bash
+# Test từ terminal
+curl http://localhost:4000/api/health
+
+# Response:
+# {"ok":true,"service":"vps-monitoring-api","version":"1.0.0","uptime":141,"port":4000}
+
+# Test database connection
+curl http://localhost:4000/api/health/db
+
+# Response:
+# {"ok":true,"database":"vps-monitoring"}
+```
+
+Endpoint `/api/health` có CORS `*` (cho phép gọi từ bất kỳ domain nào), phục vụ cho tính năng "Test kết nối" trên UI Settings.
+
+---
+
+## Troubleshooting
+
+### UI không kết nối được API
+
+1. Kiểm tra API server đang chạy: `curl http://localhost:4000/api/health`
+2. Kiểm tra `API_URL` trong `.env` của Web UI
+3. Vào **Settings** → "Kết nối API Server" → nhấn **Test** để xem lỗi chi tiết
+4. Nếu deploy 2 server khác nhau, kiểm tra `WEB_ORIGINS` trên API server có chứa domain UI
+5. Restart UI server sau khi thay đổi `API_URL`
+
+### Agent không gửi metrics
+
+1. Kiểm tra agent: `sudo systemctl status vps-monitor-agent`
+2. Xem logs: `sudo journalctl -u vps-monitor-agent -f`
+3. Kiểm tra API server reachable từ VPS: `curl http://API_SERVER/api/health`
+
+### Telegram bot không hoạt động
+
+1. Kiểm tra bot token đã cấu hình trong Settings
+2. Restart API server sau khi thay đổi token
+3. Chi tiết: [telegram-bot-setup.md](telegram-bot-setup.md)
