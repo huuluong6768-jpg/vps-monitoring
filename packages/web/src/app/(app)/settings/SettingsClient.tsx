@@ -9,7 +9,13 @@ import {
   Loader2,
   Monitor,
   Send,
+  Server,
   ShieldCheck,
+  Wifi,
+  WifiOff,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -27,9 +33,11 @@ type AlertSettingsResponse = {
 
 export function SettingsClient({
   appUrl,
+  apiUrl,
   offlineAfterSeconds,
 }: {
   appUrl: string;
+  apiUrl: string;
   offlineAfterSeconds: number;
 }) {
   const { data } = useSWR<{ user: { username: string } | null }>('/api/auth/me', fetcher);
@@ -56,6 +64,13 @@ export function SettingsClient({
   const [alertsHydrated, setAlertsHydrated] = useState(false);
   const [savingAlerts, setSavingAlerts] = useState(false);
   const [testing, setTesting] = useState(false);
+
+  const [testApiUrl, setTestApiUrl] = useState('');
+  const [apiStatus, setApiStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
+  const [apiInfo, setApiInfo] = useState<{ version?: string; uptime?: number } | null>(null);
+  const [apiError, setApiError] = useState('');
+  const [showApiGuide, setShowApiGuide] = useState(false);
+  const [copiedApi, setCopiedApi] = useState(false);
 
   useEffect(() => {
     if (!alertData || alertsHydrated) return;
@@ -374,6 +389,144 @@ export function SettingsClient({
           </>
         )}
       </form>
+
+      <div className="card card-pad">
+        <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
+          <Server className="h-4 w-4 text-ink-muted" />
+          Kết nối API Server
+        </h2>
+        <p className="mt-1 text-sm text-ink-muted">
+          Web UI giao tiếp với API server qua proxy. Khi tách riêng 2 server, cần cấu hình URL của API server.
+        </p>
+
+        <div className="mt-4 space-y-4">
+          <div>
+            <label className="label">API URL hiện tại</label>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 truncate rounded-lg border border-border bg-bg-muted px-3 py-2 font-mono text-sm text-ink">{apiUrl}</code>
+              <button
+                type="button"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(apiUrl);
+                  setCopiedApi(true);
+                  toast.success('Copied');
+                  setTimeout(() => setCopiedApi(false), 1500);
+                }}
+                className="rounded-md p-2 text-ink-soft hover:bg-bg-muted hover:text-ink"
+                title="Copy API URL"
+              >
+                {copiedApi ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="label">Test kết nối API</label>
+            <div className="flex gap-2">
+              <input
+                className="input flex-1 font-mono text-sm"
+                value={testApiUrl}
+                onChange={(e) => { setTestApiUrl(e.target.value); setApiStatus('idle'); }}
+                placeholder={apiUrl}
+              />
+              <button
+                type="button"
+                className="btn-primary whitespace-nowrap"
+                disabled={apiStatus === 'testing'}
+                onClick={async () => {
+                  const url = testApiUrl.trim() || apiUrl;
+                  setApiStatus('testing');
+                  setApiInfo(null);
+                  setApiError('');
+                  try {
+                    const res = await fetch(`${url.replace(/\/$/, '')}/api/health`, { mode: 'cors' });
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const data = await res.json();
+                    if (data.ok) {
+                      setApiStatus('ok');
+                      setApiInfo({ version: data.version, uptime: data.uptime });
+                    } else {
+                      throw new Error('API returned ok=false');
+                    }
+                  } catch (err) {
+                    setApiStatus('error');
+                    setApiError(err instanceof Error ? err.message : 'Không kết nối được');
+                  }
+                }}
+              >
+                {apiStatus === 'testing' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wifi className="h-4 w-4" />}
+                Test
+              </button>
+            </div>
+            {apiStatus === 'ok' && apiInfo && (
+              <div className="mt-2 flex items-center gap-2 text-sm text-success">
+                <Wifi className="h-4 w-4" />
+                Kết nối thành công — v{apiInfo.version}, uptime {apiInfo.uptime}s
+              </div>
+            )}
+            {apiStatus === 'error' && (
+              <div className="mt-2 flex items-center gap-2 text-sm text-danger">
+                <WifiOff className="h-4 w-4" />
+                Lỗi: {apiError}
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-border pt-4">
+            <button
+              type="button"
+              onClick={() => setShowApiGuide(!showApiGuide)}
+              className="flex items-center gap-2 text-sm font-medium text-accent hover:text-accent/80"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Hướng dẫn kết nối khi tách riêng Server và UI
+              {showApiGuide ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+            {showApiGuide && (
+              <div className="mt-3 space-y-4 rounded-lg border border-border bg-bg p-4 text-sm text-ink-muted">
+                <div>
+                  <h4 className="mb-2 font-semibold text-ink">Cách 1: Cùng server (Reverse Proxy)</h4>
+                  <p className="mb-1">Cài cả API + UI trên cùng 1 server, dùng Nginx hoặc Caddy:</p>
+                  <pre className="overflow-x-auto rounded-md bg-bg-muted p-3 text-xs">{`# .env trên UI server
+API_URL=http://localhost:4000
+
+# Nginx config
+server {
+  listen 80;
+  location /api/ { proxy_pass http://localhost:4000; }
+  location / { proxy_pass http://localhost:3000; }
+}`}</pre>
+                </div>
+                <div>
+                  <h4 className="mb-2 font-semibold text-ink">Cách 2: 2 Server riêng biệt</h4>
+                  <p className="mb-1">Server A chạy API, Server B chạy UI:</p>
+                  <pre className="overflow-x-auto rounded-md bg-bg-muted p-3 text-xs">{`# Server A (API) — chạy Express
+cd packages/api && API_PORT=4000 npx tsx src/index.ts
+# → API sẵn sàng tại http://SERVER_A_IP:4000
+
+# Server B (UI) — set API_URL trỏ về Server A
+API_URL=http://SERVER_A_IP:4000 npx next start`}</pre>
+                  <p className="mt-1 text-xs">Copy URL <code className="rounded bg-bg-muted px-1">http://SERVER_A_IP:4000</code> paste vào ô test ở trên để kiểm tra.</p>
+                </div>
+                <div>
+                  <h4 className="mb-2 font-semibold text-ink">Cách 3: UI trên Vercel + API trên VPS</h4>
+                  <p className="mb-1">Deploy UI lên Vercel/Netlify (free), API chạy trên VPS:</p>
+                  <pre className="overflow-x-auto rounded-md bg-bg-muted p-3 text-xs">{`# Trên Vercel Dashboard:
+# Settings → Environment Variables
+# Thêm: API_URL = https://api.your-domain.com
+
+# Trên VPS:
+WEB_ORIGINS=https://your-app.vercel.app npx tsx src/index.ts`}</pre>
+                  <p className="mt-1 text-xs">Lưu ý set <code className="rounded bg-bg-muted px-1">WEB_ORIGINS</code> trên API server để cho phép CORS từ UI domain.</p>
+                </div>
+                <div className="rounded-md border border-yellow-500/30 bg-yellow-500/5 p-3">
+                  <p className="text-xs"><strong>Quan trọng:</strong> Sau khi thay đổi <code className="rounded bg-bg-muted px-1">API_URL</code>, cần restart UI server để proxy nhận URL mới.</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       <div className="card card-pad">
         <h2 className="text-base font-semibold text-ink">Dashboard</h2>

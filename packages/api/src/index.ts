@@ -53,7 +53,7 @@ app.listen(PORT, async () => {
       const bot = new TelegramBot({ token: settings.telegramBotToken, appUrl });
       await bot.start();
       // Store bot instance for potential restart on settings change
-      (app as Record<string, unknown>).__telegramBot = bot;
+      (app as unknown as Record<string, unknown>).__telegramBot = bot;
     } else {
       console.log('[API] Telegram bot not configured — set bot token in Settings to enable.');
     }
