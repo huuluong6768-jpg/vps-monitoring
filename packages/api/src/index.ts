@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 
+import { TelegramBot, getAppSettings } from '@vps-monitoring/shared';
 import agentsRouter from './routes/agents';
 import authRouter from './routes/auth';
 import cloudRouter from './routes/cloud';
@@ -40,9 +41,25 @@ app.use('/api/install', installRouter);
 
 const PORT = Number(process.env.API_PORT || 4000);
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`[API] VPS Monitoring API server listening on port ${PORT}`);
   console.log(`[API] Allowed CORS origins: ${WEB_ORIGINS.join(', ')}`);
+
+  // Start Telegram bot if configured
+  try {
+    const settings = await getAppSettings();
+    if (settings.telegramBotToken) {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+      const bot = new TelegramBot({ token: settings.telegramBotToken, appUrl });
+      await bot.start();
+      // Store bot instance for potential restart on settings change
+      (app as Record<string, unknown>).__telegramBot = bot;
+    } else {
+      console.log('[API] Telegram bot not configured — set bot token in Settings to enable.');
+    }
+  } catch (e) {
+    console.error('[API] Failed to start Telegram bot:', e);
+  }
 });
 
 export default app;

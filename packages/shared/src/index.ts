@@ -30,6 +30,7 @@ export type { ICloudClient, CloudFile, CloudQuota, CloudUploadResult } from './c
 export { getGoogleOAuthUrl, exchangeGoogleCode, GoogleDriveClient } from './cloud/google-drive';
 
 // Telegram
+export { TelegramBot } from './telegram-bot';
 export { telegramSendMessageHtml, telegramGetMe, sanitizeTelegramBotToken, sanitizeTelegramChatId, TelegramTokenRejectedError } from './telegram-client';
 export type { TelegramCallError, TelegramCallOk } from './telegram-client';
 export { sendTelegramOverloadIfNeeded, sendTelegramDisconnectIfNeeded, sendTelegramSettingsTestResult, isTelegramAlertsConfigured, evaluateOverload, shouldSendTelegramDisconnectAlert } from './telegram-alerts';
