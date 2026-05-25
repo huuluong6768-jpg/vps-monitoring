@@ -2,13 +2,15 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Server, Settings } from 'lucide-react';
+import { LayoutDashboard, Server, Settings, Copy, CloudUpload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
 const NAV = [
   { href: '/dashboard', label: 'Home', icon: LayoutDashboard },
   { href: '/servers', label: 'Servers', icon: Server },
+  { href: '/clone', label: 'Clone', icon: Copy },
+  { href: '/backups', label: 'Backups', icon: CloudUpload },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
