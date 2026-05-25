@@ -23,7 +23,7 @@ export class PCloudClient implements ICloudClient {
     const base = getBase(this.config);
     const query = new URLSearchParams({
       ...params,
-      access_token: this.config.accessToken,
+      auth: this.config.accessToken,
     });
     const res = await fetch(`${base}/${method}?${query}`);
     return res.json() as Promise<Record<string, unknown>>;
@@ -76,7 +76,7 @@ export class PCloudClient implements ICloudClient {
 
     const base = getBase(this.config);
     const query = new URLSearchParams({
-      access_token: this.config.accessToken,
+      auth: this.config.accessToken,
       folderid: folderId || '0',
       filename: name,
       nopartial: '1',
