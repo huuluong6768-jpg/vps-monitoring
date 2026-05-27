@@ -1,6 +1,17 @@
-# Bundled Mongo is optional. For Atlas / another server, set MONGODB_URI in .env and run:
-#   docker compose up -d --no-deps web
-version: "3.9"
+# ==============================================================================
+# VPS Monitor — Docker Compose
+#
+# Quick start:
+#   cp .env.example .env     # edit JWT_SECRET, etc.
+#   docker compose up -d
+#
+# Services:
+#   mongo  — MongoDB 7 (data persisted in volume)
+#   api    — Express API server (port 4000)
+#   web    — Next.js Web UI (port 3000)
+#
+# Coolify: import this repo → Coolify auto-detects docker-compose.yml
+# ==============================================================================
 
 services:
   mongo:
@@ -14,16 +25,34 @@ services:
       timeout: 5s
       retries: 10
 
-  web:
-    build: .
+  api:
+    build:
+      context: .
+      target: api
     restart: unless-stopped
     depends_on:
       mongo:
         condition: service_healthy
     environment:
-      # Override in .env for external Mongo (Atlas, VPS, …). Default = service name `mongo` in this file.
       MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/vps-monitoring}
-      JWT_SECRET: ${JWT_SECRET:?Please set JWT_SECRET in .env}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      API_PORT: ${API_PORT:-4000}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      WEB_ORIGINS: ${WEB_ORIGINS:-http://localhost:3000,http://web:3000}
+      AGENT_OFFLINE_AFTER_SECONDS: ${AGENT_OFFLINE_AFTER_SECONDS:-60}
+    ports:
+      - "${API_PORT:-4000}:4000"
+
+  web:
+    build:
+      context: .
+      target: web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      API_URL: http://api:4000
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
       AGENT_OFFLINE_AFTER_SECONDS: ${AGENT_OFFLINE_AFTER_SECONDS:-60}
     ports:

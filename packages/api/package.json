@@ -1,0 +1,31 @@
+{
+  "name": "@vps-monitoring/api",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@vps-monitoring/shared": "1.0.0",
+    "express": "4.21.0",
+    "cors": "2.8.5",
+    "cookie-parser": "1.4.6",
+    "bcryptjs": "2.4.3",
+    "jose": "5.6.3",
+    "zod": "3.23.8",
+    "nanoid": "5.0.7",
+    "mongoose": "8.5.1"
+  },
+  "devDependencies": {
+    "typescript": "5.5.3",
+    "@types/node": "20.14.10",
+    "@types/express": "4.17.21",
+    "@types/cors": "2.8.17",
+    "@types/cookie-parser": "1.4.7",
+    "@types/bcryptjs": "2.4.6",
+    "tsx": "4.16.2"
+  }
+}
