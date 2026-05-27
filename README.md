@@ -117,25 +117,77 @@
 
 ---
 
-## Quick Start (Docker)
+## Quick Start
+
+### Option 1: One-Command Install (recommended)
+
+SSH vào VPS và chạy:
+
+```bash
+git clone https://github.com/quatang20172-dotcom/vps-monitoring.git
+cd vps-monitoring
+sudo bash install.sh
+```
+
+Script sẽ tự động:
+- Cài Docker (nếu chưa có)
+- Tạo `.env` với JWT_SECRET random
+- Build và start 3 services (MongoDB + API + Web UI)
+- Hiển thị URL truy cập dashboard
+
+Sau đó truy cập `http://YOUR_IP:3000`, tạo tài khoản admin, và bắt đầu dùng.
+
+### Option 2: Docker Compose
 
 ```bash
 git clone https://github.com/quatang20172-dotcom/vps-monitoring.git
 cd vps-monitoring
 cp .env.example .env
 
-# Edit .env, at minimum set:
+# Edit .env — tối thiểu set:
 #   JWT_SECRET=$(openssl rand -hex 64)
-#   NEXT_PUBLIC_APP_URL=https://monitor.yourdomain.com
+#   NEXT_PUBLIC_APP_URL=http://YOUR_IP:3000
 
 docker compose up -d
 ```
 
-Open `http://localhost:3000`, create your admin account, and you're done.
+Open `http://localhost:3000`, tạo admin account, done.
+
+### Option 3: Deploy qua Coolify
+
+1. Trên Coolify dashboard → **New Resource** → **Docker Compose**
+2. Chọn **GitHub repository**: `quatang20172-dotcom/vps-monitoring`
+3. Coolify tự detect `docker-compose.yml`
+4. Thêm environment variables:
+   - `JWT_SECRET` = chuỗi random (bắt buộc)
+   - `NEXT_PUBLIC_APP_URL` = URL domain bạn muốn dùng
+5. Click **Deploy**
+
+Coolify sẽ tự build 3 services (MongoDB, API, Web UI) và expose port 3000 + 4000.
+
+### Option 4: Bare Metal (Node.js)
+
+```bash
+# Prerequisites: Node.js 18+, MongoDB 7
+git clone https://github.com/quatang20172-dotcom/vps-monitoring.git
+cd vps-monitoring
+cp .env.example .env
+# Edit .env
+
+npm install
+npm run build:shared
+
+# Terminal 1: API server
+cd packages/api && npx tsx src/index.ts
+
+# Terminal 2: Web UI
+cd packages/web && npx next dev   # dev mode
+# or: npx next build && npx next start   # production mode
+```
 
 ### MongoDB outside Docker (Atlas, another VPS, …)
 
-Set **`MONGODB_URI`** in `.env` to your real connection string:
+Set **`MONGODB_URI`** in `.env`:
 
 ```bash
 # Atlas
@@ -143,9 +195,23 @@ MONGODB_URI=mongodb+srv://user:pass@cluster0.xxxxx.mongodb.net/vps-monitoring
 
 # Remote VPS
 MONGODB_URI=mongodb://user:pass@db.example.com:27017/vps-monitoring?authSource=admin
+```
 
-# Start without local Mongo
-docker compose up -d --no-deps web
+---
+
+## Thêm VPS vào monitoring
+
+Sau khi cài server chính, thêm bất kỳ VPS nào bằng **1 lệnh duy nhất**:
+
+```bash
+curl -fsSL http://YOUR_SERVER_IP:4000/api/install | sudo bash
+```
+
+Agent tự đăng ký, tự cài systemd service, tự gửi metrics mỗi 15 giây. Không cần config gì thêm.
+
+**Gỡ cài đặt agent:**
+```bash
+sudo /opt/vps-monitor-agent/uninstall.sh
 ```
 
 ---
@@ -153,21 +219,15 @@ docker compose up -d --no-deps web
 ## Local Development
 
 ```bash
-# 1. Install dependencies
 npm install
+cp .env.example .env         # edit JWT_SECRET, MONGODB_URI
+npm run build:shared          # build shared library first
 
-# 2. Setup environment
-cp .env.example .env
-# Edit .env — set MONGODB_URI, JWT_SECRET
+# Terminal 1: API server
+npm run dev:api               # http://localhost:4000
 
-# 3. Build shared library
-npm run build:shared
-
-# 4. Start API server (Terminal 1)
-npm run dev:api
-
-# 5. Start Web UI (Terminal 2)
-npm run dev:web
+# Terminal 2: Web UI
+npm run dev:web               # http://localhost:3000
 ```
 
 Visit `http://localhost:3000` for UI and `http://localhost:4000` for API.
