@@ -1,7 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  output: 'standalone',
+  // Use standalone output for Docker/VPS deployments; skip on Vercel (Vercel handles its own optimisation)
+  ...(process.env.VERCEL ? {} : { output: 'standalone' }),
   experimental: {
     serverComponentsExternalPackages: ['mongoose', 'bcryptjs'],
   },
