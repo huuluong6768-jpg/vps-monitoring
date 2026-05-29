@@ -230,7 +230,7 @@ upload_backup() {
   local backup_file="$1"
   local file_size
   file_size=$(stat -c%s "$backup_file" 2>/dev/null || echo 0)
-  local chunk_size=$((1024 * 1024 * 1024))  # 1GB
+  local chunk_size=$((50 * 1024 * 1024))  # 50MB (small to avoid OOM on API server)
 
   if [ "$file_size" -le "$chunk_size" ]; then
     report_progress "uploading" 75 "Uploading backup ($( du -sh "$backup_file" | cut -f1))..."

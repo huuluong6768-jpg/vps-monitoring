@@ -26,7 +26,7 @@ app.use(cors({
 }));
 app.use(cookieParser());
 app.use(express.json({ limit: '50mb' }));
-app.use(express.raw({ type: 'application/octet-stream', limit: '2gb' }));
+app.use(express.raw({ type: 'application/octet-stream', limit: '100mb' }));
 
 // Serve agent scripts as static files (under /api/ so the web proxy forwards them)
 app.use('/api/scripts', express.static(path.resolve(__dirname, '../public')));

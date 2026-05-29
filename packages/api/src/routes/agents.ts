@@ -365,6 +365,7 @@ router.post('/backup/upload', async (req: Request, res: Response) => {
     res.json({ ok: true, fileId: result.fileId });
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Upload failed';
+    console.error(`[Backup Upload] Failed for snapshot ${snapshotId}, chunk ${chunkIndex}:`, msg);
     snapshot.status = 'failed';
     snapshot.errorMessage = msg;
     await snapshot.save();

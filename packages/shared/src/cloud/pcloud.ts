@@ -97,14 +97,23 @@ export class PCloudClient implements ICloudClient {
       nopartial: '1',
     });
 
-    const res = await fetch(`${base}/uploadfile?${query}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: fileBuffer,
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 300_000); // 5 min timeout per chunk
+
+    let res: globalThis.Response;
+    try {
+      res = await fetch(`${base}/uploadfile?${query}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: fileBuffer,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     const json = (await res.json()) as Record<string, unknown>;
-    if (json.result !== 0) throw new Error((json.error as string) || 'Upload failed');
+    if (json.result !== 0) throw new Error((json.error as string) || `Upload failed (pCloud error ${json.result})`);
 
     const metadata = (json.metadata as Record<string, unknown>[]) || [];
     const file = metadata[0] || {};

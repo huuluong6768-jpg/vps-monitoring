@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
+import { Types } from 'mongoose';
 import { connectDB, ServerCloneConfig, CloneSnapshot, RestoreJob, DirectCloneJob, Agent } from '@vps-monitoring/shared';
 import { requireAuth } from '../middleware/auth';
 
@@ -63,7 +64,7 @@ router.get('/configs/:id', requireAuth, async (req: Request, res: Response) => {
 });
 
 const patchConfigSchema = z.object({
-  enabled: z.boolean().optional(), remotePath: z.string().max(500).optional(),
+  enabled: z.boolean().optional(), providerId: z.string().optional(), remotePath: z.string().max(500).optional(),
   notifyOnSuccess: z.boolean().optional(), notifyOnFailure: z.boolean().optional(),
   modes: z.object({
     fullImage: z.object({
@@ -89,6 +90,7 @@ router.patch('/configs/:id', requireAuth, async (req: Request, res: Response) =>
 
   const d = parsed.data;
   if (d.enabled !== undefined) config.enabled = d.enabled;
+  if (d.providerId !== undefined) config.providerId = new Types.ObjectId(d.providerId);
   if (d.remotePath !== undefined) config.remotePath = d.remotePath;
   if (d.notifyOnSuccess !== undefined) config.notifyOnSuccess = d.notifyOnSuccess;
   if (d.notifyOnFailure !== undefined) config.notifyOnFailure = d.notifyOnFailure;

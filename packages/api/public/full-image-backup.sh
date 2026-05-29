@@ -12,7 +12,7 @@ CONFIG_FILE="/opt/vps-monitor-agent/agent.conf"
 
 SNAPSHOT_ID="${1:?Usage: full-image-backup.sh <snapshot_id>}"
 BACKUP_DIR="/tmp/vps-backup-$$"
-CHUNK_SIZE=$((1024 * 1024 * 1024))  # 1GB chunks
+CHUNK_SIZE=$((50 * 1024 * 1024))  # 50MB chunks (small to avoid OOM on API server)
 
 report_progress() {
   local status="$1" progress="$2" message="$3"
@@ -155,7 +155,7 @@ upload_file() {
     local checksum
     checksum=$(sha256sum "$backup_file" | cut -d' ' -f1)
 
-    curl -fsS --max-time 1800 -X POST "$SERVER_URL/api/agents/backup/upload" \
+    curl -fsS --max-time 600 --retry 3 --retry-delay 5 -X POST "$SERVER_URL/api/agents/backup/upload" \
       -H "Content-Type: application/octet-stream" \
       -H "X-Agent-Id: $AGENT_ID" \
       -H "X-Agent-Token: $AGENT_TOKEN" \
@@ -185,7 +185,7 @@ upload_file() {
 
       report_progress "uploading" "$pct" "Uploading chunk $current/$total_chunks..."
 
-      curl -fsS --max-time 1800 -X POST "$SERVER_URL/api/agents/backup/upload" \
+      curl -fsS --max-time 300 --retry 3 --retry-delay 5 -X POST "$SERVER_URL/api/agents/backup/upload" \
         -H "Content-Type: application/octet-stream" \
         -H "X-Agent-Id: $AGENT_ID" \
         -H "X-Agent-Token: $AGENT_TOKEN" \
