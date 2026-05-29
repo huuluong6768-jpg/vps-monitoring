@@ -1,0 +1,56 @@
+# ==============================================================================
+# VPS Monitor — Docker Compose for Coolify (pre-built images from GHCR)
+#
+# Uses images built by GitHub Actions instead of building from source.
+# Faster deploys, no build step needed on the Coolify server.
+#
+# Usage on Coolify:
+#   1. New Resource → Docker Compose
+#   2. Point to this repo, set Compose file to: docker-compose.coolify.yml
+#   3. Add environment variables (JWT_SECRET, NEXT_PUBLIC_APP_URL, etc.)
+#   4. Deploy
+# ==============================================================================
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    image: ghcr.io/quatang20172-dotcom/vps-monitoring-api:latest
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/vps-monitoring}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      API_PORT: ${API_PORT:-4000}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      WEB_ORIGINS: ${WEB_ORIGINS:-http://localhost:3000,http://web:3000}
+      AGENT_OFFLINE_AFTER_SECONDS: ${AGENT_OFFLINE_AFTER_SECONDS:-60}
+    ports:
+      - "${API_PORT:-4000}:4000"
+
+  web:
+    image: ghcr.io/quatang20172-dotcom/vps-monitoring-web:latest
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      API_URL: http://api:4000
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      AGENT_OFFLINE_AFTER_SECONDS: ${AGENT_OFFLINE_AFTER_SECONDS:-60}
+    ports:
+      - "${PORT:-3000}:3000"
+
+volumes:
+  mongo_data:
