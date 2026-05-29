@@ -151,7 +151,77 @@ server {
 
 ---
 
-## Cách 4: Deploy Web UI lên Vercel/Netlify
+## Cách 4: Deploy qua Coolify
+
+Coolify là nền tảng self-hosted PaaS (giống Heroku) giúp deploy dễ dàng. Hỗ trợ 2 cách:
+
+### Cách 4a: Build from source
+
+Coolify clone repo và build Docker images trên server.
+
+```
+Coolify Dashboard
+  → Projects → + New
+  → Docker Compose
+  → Chọn GitHub repo: vps-monitoring
+  → Compose file: docker-compose.yml (mặc định)
+  → Environment Variables:
+      JWT_SECRET=<openssl rand -hex 64>
+      NEXT_PUBLIC_APP_URL=https://monitor.yourdomain.com
+  → Deploy
+```
+
+### Cách 4b: Pre-built images từ GHCR (khuyên dùng)
+
+Dùng images đã build sẵn bởi GitHub Actions — deploy nhanh hơn.
+
+```
+Coolify Dashboard
+  → Projects → + New
+  → Docker Compose
+  → Chọn GitHub repo: vps-monitoring
+  → Compose file: docker-compose.coolify.yml    ← đổi thành file này
+  → Environment Variables:
+      JWT_SECRET=<openssl rand -hex 64>
+      NEXT_PUBLIC_APP_URL=https://monitor.yourdomain.com
+  → Deploy
+```
+
+Images sử dụng:
+- `ghcr.io/<owner>/vps-monitoring-api:latest`
+- `ghcr.io/<owner>/vps-monitoring-web:latest`
+
+### Cấu hình domain trên Coolify
+
+1. Vào resource → tab **Settings**
+2. Đặt domain cho service `web`: `monitor.yourdomain.com`
+3. Coolify tự cấp SSL certificate (Let's Encrypt)
+4. (Tuỳ chọn) Đặt domain cho service `api`: `api.monitor.yourdomain.com`
+
+### Auto-redeploy
+
+Để tự động redeploy khi push code mới:
+1. Trên Coolify → resource → **Webhooks** → copy URL
+2. GitHub → repo Settings → Webhooks → Add → paste URL
+3. Hoặc: thêm step trigger Coolify webhook vào GitHub Actions workflow
+
+### Kiểm tra sau deploy
+
+```bash
+# Health check API
+curl https://monitor.yourdomain.com/api/health
+# → {"ok":true,"service":"vps-monitoring-api","version":"1.0.0",...}
+
+# Health check database
+curl https://monitor.yourdomain.com/api/health/db
+# → {"ok":true,"database":"vps-monitoring"}
+```
+
+Truy cập domain → tạo admin account → bắt đầu thêm VPS.
+
+---
+
+## Cách 5: Deploy Web UI lên Vercel/Netlify
 
 Web UI có thể deploy lên Vercel miễn phí, API server vẫn chạy trên VPS:
 

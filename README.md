@@ -153,33 +153,139 @@ docker compose up -d
 
 Open `http://localhost:3000`, tạo admin account, done.
 
-### Option 3: Deploy qua Coolify (build from source)
+### Option 3: Deploy qua Coolify
 
-1. Trên Coolify dashboard → **New Resource** → **Docker Compose**
-2. Chọn **GitHub repository**: `quatang20172-dotcom/vps-monitoring`
-3. Coolify tự detect `docker-compose.yml`
-4. Thêm environment variables:
-   - `JWT_SECRET` = chuỗi random (bắt buộc)
-   - `NEXT_PUBLIC_APP_URL` = URL domain bạn muốn dùng
-5. Click **Deploy**
+Coolify hỗ trợ 2 cách deploy: **build from source** (Coolify tự build trên server) hoặc **dùng pre-built images** từ GHCR (nhanh hơn, khuyên dùng).
 
-Coolify sẽ tự build 3 services (MongoDB, API, Web UI) và expose port 3000 + 4000.
+#### Cách A: Build from source trên Coolify
 
-### Option 3b: Deploy qua Coolify (pre-built images from GHCR)
+> Coolify clone repo và build Docker images trực tiếp trên server. Phù hợp khi bạn muốn kiểm soát toàn bộ quá trình build.
 
-> Dùng images đã build sẵn bởi GitHub Actions — deploy nhanh hơn, không cần build trên server Coolify.
+**Bước 1:** Trên Coolify dashboard → **Projects** → chọn hoặc tạo project mới
 
-1. Trên Coolify dashboard → **New Resource** → **Docker Compose**
-2. Chọn **GitHub repository**: `quatang20172-dotcom/vps-monitoring`
-3. Đổi **Docker Compose file** thành: `docker-compose.coolify.yml`
-4. Thêm environment variables:
-   - `JWT_SECRET` = chuỗi random (bắt buộc)
-   - `NEXT_PUBLIC_APP_URL` = URL domain bạn muốn dùng
-5. Click **Deploy**
+**Bước 2:** Click **+ New** → **Docker Compose** → chọn nguồn:
+- **GitHub (App)**: Kết nối GitHub App → chọn repo `vps-monitoring`
+- **GitHub (Deploy Key)**: Dùng SSH deploy key
+- **Public Repository**: Paste URL `https://github.com/quatang20172-dotcom/vps-monitoring`
 
-Images được pull từ `ghcr.io/quatang20172-dotcom/vps-monitoring-api` và `ghcr.io/quatang20172-dotcom/vps-monitoring-web`.
+**Bước 3:** Coolify tự detect `docker-compose.yml`. Kiểm tra Compose file path là `docker-compose.yml`
 
-**Tự động redeploy:** Trên Coolify, bật **Webhook** để auto-redeploy khi có image mới trên GHCR.
+**Bước 4:** Vào tab **Environment Variables**, thêm:
+
+```env
+JWT_SECRET=<chuỗi random dài — bắt buộc>
+NEXT_PUBLIC_APP_URL=https://monitor.yourdomain.com
+```
+
+> Tạo JWT_SECRET: `openssl rand -hex 64`
+
+**Bước 5:** (Tuỳ chọn) Cấu hình domain:
+- Vào tab **Settings** → đặt domain cho service `web` (VD: `monitor.yourdomain.com`)
+- Coolify tự cấp SSL nếu dùng domain
+
+**Bước 6:** Click **Deploy** → Coolify build 3 services:
+- `mongo` — MongoDB 7
+- `api` — Express API (port 4000)
+- `web` — Next.js UI (port 3000)
+
+**Bước 7:** Kiểm tra deployment:
+```bash
+# Từ server Coolify
+curl http://localhost:4000/api/health
+# → {"ok":true,"service":"vps-monitoring-api","version":"1.0.0",...}
+```
+
+Truy cập `http://YOUR_IP:3000` hoặc domain đã cấu hình → tạo admin account → done.
+
+---
+
+#### Cách B: Deploy bằng pre-built images từ GHCR (khuyên dùng)
+
+> Dùng images đã build sẵn bởi GitHub Actions → deploy nhanh hơn nhiều, không cần build trên server Coolify. Server Coolify chỉ cần pull images và chạy.
+
+**Bước 1:** Trên Coolify dashboard → **Projects** → chọn hoặc tạo project mới
+
+**Bước 2:** Click **+ New** → **Docker Compose** → chọn nguồn repo (giống Cách A)
+
+**Bước 3:** Đổi **Docker Compose file** thành: `docker-compose.coolify.yml`
+
+> File này sử dụng pre-built images từ GHCR thay vì build from source:
+> - `ghcr.io/quatang20172-dotcom/vps-monitoring-api:latest`
+> - `ghcr.io/quatang20172-dotcom/vps-monitoring-web:latest`
+
+**Bước 4:** Vào tab **Environment Variables**, thêm:
+
+```env
+JWT_SECRET=<chuỗi random dài — bắt buộc>
+NEXT_PUBLIC_APP_URL=https://monitor.yourdomain.com
+```
+
+**Bước 5:** (Tuỳ chọn) Cấu hình domain (giống Cách A)
+
+**Bước 6:** Click **Deploy** → Coolify pull images từ GHCR và start 3 services
+
+**Bước 7:** Kiểm tra deployment (giống Cách A)
+
+---
+
+#### Cấu hình tự động redeploy trên Coolify
+
+Để Coolify tự động redeploy khi có image mới (sau mỗi lần push code lên `main`):
+
+**Cách 1: Webhook (đơn giản)**
+1. Trên Coolify → vào resource → tab **Webhooks**
+2. Copy webhook URL
+3. Trên GitHub → repo Settings → Webhooks → Add webhook → paste URL
+4. Chọn event: `Packages` (khi image mới được push lên GHCR)
+
+**Cách 2: GitHub Actions trigger (tự động hoàn toàn)**
+
+Thêm step vào cuối workflow `.github/workflows/docker-build.yml`:
+
+```yaml
+  notify-coolify:
+    name: Trigger Coolify redeploy
+    needs: [build-api, build-web]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Coolify webhook
+        run: |
+          curl -X GET "${{ secrets.COOLIFY_WEBHOOK_URL }}" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_API_TOKEN }}"
+```
+
+Thêm secrets trên GitHub:
+- `COOLIFY_WEBHOOK_URL` = URL webhook từ Coolify
+- `COOLIFY_API_TOKEN` = API token từ Coolify (Settings → API Tokens)
+
+---
+
+#### Tuỳ chỉnh nâng cao trên Coolify
+
+**Đổi port mặc định:**
+```env
+API_PORT=4000      # Port API server (mặc định 4000)
+PORT=3000          # Port Web UI (mặc định 3000)
+```
+
+**Dùng MongoDB external (Atlas, remote server):**
+```env
+MONGODB_URI=mongodb+srv://user:pass@cluster0.xxxxx.mongodb.net/vps-monitoring
+```
+
+Khi dùng MongoDB external, bạn có thể xoá service `mongo` trong docker-compose.
+
+**Cấu hình Telegram Bot:**
+```env
+# Thêm vào Environment Variables trên Coolify
+# Hoặc cấu hình sau khi deploy qua UI Settings
+```
+
+**GHCR images visibility:**
+Nếu GHCR packages mặc định là private, cần:
+1. Vào GitHub → Profile → Packages → chọn package
+2. Package Settings → Danger Zone → Change visibility → **Public**
+3. Hoặc: thêm GHCR credentials trên Coolify (Settings → Docker Registries)
 
 ### Option 4: Bare Metal (Node.js)
 
@@ -702,7 +808,7 @@ Dùng `docker-compose.coolify.yml` thay vì `docker-compose.yml` để sử dụ
 
 | Tài liệu | Đường dẫn | Mô tả |
 |-----------|-----------|--------|
-| Deployment Guide | [docs/deployment-guide.md](docs/deployment-guide.md) | 4 cách deploy + hướng dẫn kết nối API/UI |
+| Deployment Guide | [docs/deployment-guide.md](docs/deployment-guide.md) | 5 cách deploy (Docker, Bare Metal, Coolify, Vercel) + hướng dẫn kết nối API/UI |
 | Telegram Bot Setup | [docs/telegram-bot-setup.md](docs/telegram-bot-setup.md) | Hướng dẫn tạo bot + cấu hình + lệnh |
 
 ---
