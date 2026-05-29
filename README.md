@@ -153,7 +153,7 @@ docker compose up -d
 
 Open `http://localhost:3000`, tạo admin account, done.
 
-### Option 3: Deploy qua Coolify
+### Option 3: Deploy qua Coolify (build from source)
 
 1. Trên Coolify dashboard → **New Resource** → **Docker Compose**
 2. Chọn **GitHub repository**: `quatang20172-dotcom/vps-monitoring`
@@ -164,6 +164,22 @@ Open `http://localhost:3000`, tạo admin account, done.
 5. Click **Deploy**
 
 Coolify sẽ tự build 3 services (MongoDB, API, Web UI) và expose port 3000 + 4000.
+
+### Option 3b: Deploy qua Coolify (pre-built images from GHCR)
+
+> Dùng images đã build sẵn bởi GitHub Actions — deploy nhanh hơn, không cần build trên server Coolify.
+
+1. Trên Coolify dashboard → **New Resource** → **Docker Compose**
+2. Chọn **GitHub repository**: `quatang20172-dotcom/vps-monitoring`
+3. Đổi **Docker Compose file** thành: `docker-compose.coolify.yml`
+4. Thêm environment variables:
+   - `JWT_SECRET` = chuỗi random (bắt buộc)
+   - `NEXT_PUBLIC_APP_URL` = URL domain bạn muốn dùng
+5. Click **Deploy**
+
+Images được pull từ `ghcr.io/quatang20172-dotcom/vps-monitoring-api` và `ghcr.io/quatang20172-dotcom/vps-monitoring-web`.
+
+**Tự động redeploy:** Trên Coolify, bật **Webhook** để auto-redeploy khi có image mới trên GHCR.
 
 ### Option 4: Bare Metal (Node.js)
 
@@ -647,6 +663,38 @@ Khi tách riêng API và UI, vào **Settings** → mục **"Kết nối API Serv
 - Always run the dashboard behind HTTPS (e.g. Caddy, Nginx, Traefik).
 - Set a strong `JWT_SECRET` (`openssl rand -hex 64`).
 - Cloud provider credentials are encrypted with AES-256-GCM before storing in MongoDB.
+
+---
+
+## CI/CD — GitHub Actions
+
+Repo sử dụng GitHub Actions để tự động build Docker images và push lên **GitHub Container Registry (GHCR)**.
+
+### Workflow: Build & Push Docker Images
+
+| Trigger | Mô tả |
+|---------|--------|
+| Push to `main` | Build và push images với tag `main` + `latest` |
+| Tag `v*` (VD: `v1.2.3`) | Build và push images với tag version (`1.2.3`, `1.2`) |
+| Manual dispatch | Chạy thủ công từ Actions tab |
+
+### Images được tạo
+
+| Image | Mô tả |
+|-------|--------|
+| `ghcr.io/quatang20172-dotcom/vps-monitoring-api` | Express API server |
+| `ghcr.io/quatang20172-dotcom/vps-monitoring-web` | Next.js Web UI |
+
+### Pull images
+
+```bash
+docker pull ghcr.io/quatang20172-dotcom/vps-monitoring-api:latest
+docker pull ghcr.io/quatang20172-dotcom/vps-monitoring-web:latest
+```
+
+### Deploy lên Coolify với pre-built images
+
+Dùng `docker-compose.coolify.yml` thay vì `docker-compose.yml` để sử dụng images từ GHCR. Xem [Option 3b](#option-3b-deploy-qua-coolify-pre-built-images-from-ghcr) ở trên.
 
 ---
 
