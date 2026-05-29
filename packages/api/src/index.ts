@@ -6,11 +6,13 @@ import path from 'node:path';
 import { TelegramBot, getAppSettings } from '@vps-monitoring/shared';
 import { startRestoreWorker } from './services/restore-worker';
 import { startDirectCloneWorker } from './services/direct-clone-worker';
+import { startRenewalReminderWorker } from './services/renewal-reminder-worker';
 import agentsRouter from './routes/agents';
 import authRouter from './routes/auth';
 import cloudRouter from './routes/cloud';
 import cloneRouter from './routes/clone';
 import groupsRouter from './routes/groups';
+import renewalsRouter from './routes/renewals';
 import settingsRouter from './routes/settings';
 import setupRouter from './routes/setup';
 import healthRouter from './routes/health';
@@ -37,6 +39,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/cloud', cloudRouter);
 app.use('/api/clone', cloneRouter);
 app.use('/api/groups', groupsRouter);
+app.use('/api/renewals', renewalsRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/setup', setupRouter);
 app.use('/api/health', healthRouter);
@@ -69,6 +72,9 @@ app.listen(PORT, async () => {
 
   // Start direct clone worker — polls for pending direct clone jobs
   startDirectCloneWorker();
+
+  // Start renewal reminder worker — checks for expiring services
+  startRenewalReminderWorker();
 });
 
 export default app;

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Server, Settings, Copy, CloudUpload } from 'lucide-react';
+import { LayoutDashboard, Server, Settings, Copy, CloudUpload, CalendarClock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
@@ -11,6 +11,7 @@ const NAV = [
   { href: '/servers', label: 'Servers', icon: Server },
   { href: '/clone', label: 'Clone', icon: Copy },
   { href: '/backups', label: 'Backups', icon: CloudUpload },
+  { href: '/renewals', label: 'Renewals', icon: CalendarClock },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
