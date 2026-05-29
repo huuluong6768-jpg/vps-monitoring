@@ -199,99 +199,71 @@ export_docker_volumes() {
     done
 }
 
-compress_backup() {
-  report_progress "compressing" 62 "Compressing backup..."
+upload_chunk() {
+  local chunk_file="$1" chunk_index="$2"
+  local checksum size
+  checksum=$(sha256sum "$chunk_file" | cut -d' ' -f1)
+  size=$(stat -c%s "$chunk_file")
 
-  local timestamp
-  timestamp=$(date +%Y%m%d-%H%M%S)
-  local tar_file="$BACKUP_DIR/rsync-${AGENT_ID}-${timestamp}.tar"
+  curl -fsS --max-time 300 --retry 3 --retry-delay 5 \
+    -X POST "$SERVER_URL/api/agents/backup/upload" \
+    -H "Content-Type: application/octet-stream" \
+    -H "X-Agent-Id: $AGENT_ID" \
+    -H "X-Agent-Token: $AGENT_TOKEN" \
+    -H "X-Snapshot-Id: $SNAPSHOT_ID" \
+    -H "X-Chunk-Index: $chunk_index" \
+    -H "X-Chunk-Checksum: $checksum" \
+    -H "X-Chunk-Size: $size" \
+    --data-binary @"$chunk_file"
+}
 
-  local compress_ext="gz"
+compress_and_upload() {
+  local chunk_size=$((50 * 1024 * 1024))  # 50MB chunks
+
+  report_progress "compressing" 62 "Compressing and splitting into 50MB chunks..."
+
+  local chunks_dir="$BACKUP_DIR/chunks"
+  mkdir -p "$chunks_dir"
+
   local compress_cmd="gzip -1"
-  if command -v zstd >/dev/null 2>&1; then
-    compress_ext="zst"
-    compress_cmd="zstd -1 -T0"
-  elif command -v pigz >/dev/null 2>&1; then
+  if command -v pigz >/dev/null 2>&1; then
     compress_cmd="pigz -1 -p $(nproc)"
   fi
 
-  tar cf - -C "$STAGING_DIR/current" . | $compress_cmd > "${tar_file}.${compress_ext}"
+  # Stream: tar → compress → split into 50MB chunks (never stores full archive)
+  tar cf - -C "$STAGING_DIR/current" . | $compress_cmd | split -b "$chunk_size" -d -a 4 - "$chunks_dir/chunk_"
 
-  sha256sum "${tar_file}.${compress_ext}" > "${tar_file}.${compress_ext}.sha256"
+  # Upload chunks one by one, delete after upload to save disk space
+  local total_chunks current=0
+  total_chunks=$(ls -1 "$chunks_dir"/chunk_* 2>/dev/null | wc -l)
 
-  local file_size
-  file_size=$(stat -c%s "${tar_file}.${compress_ext}" 2>/dev/null || echo 0)
-  report_progress "compressing" 70 "Compressed: $(du -sh "${tar_file}.${compress_ext}" | cut -f1)"
-
-  echo "${tar_file}.${compress_ext}"
-}
-
-upload_backup() {
-  local backup_file="$1"
-  local file_size
-  file_size=$(stat -c%s "$backup_file" 2>/dev/null || echo 0)
-  local chunk_size=$((50 * 1024 * 1024))  # 50MB (small to avoid OOM on API server)
-
-  if [ "$file_size" -le "$chunk_size" ]; then
-    report_progress "uploading" 75 "Uploading backup ($( du -sh "$backup_file" | cut -f1))..."
-    local checksum
-    checksum=$(sha256sum "$backup_file" | cut -d' ' -f1)
-
-    curl -fsS --max-time 600 -X POST "$SERVER_URL/api/agents/backup/upload" \
-      -H "Content-Type: application/octet-stream" \
-      -H "X-Agent-Id: $AGENT_ID" \
-      -H "X-Agent-Token: $AGENT_TOKEN" \
-      -H "X-Snapshot-Id: $SNAPSHOT_ID" \
-      -H "X-Chunk-Index: 1" \
-      -H "X-Chunk-Total: 1" \
-      -H "X-Chunk-Checksum: $checksum" \
-      -H "X-Chunk-Size: $file_size" \
-      --data-binary @"$backup_file" || {
-        report_progress "failed" 75 "Upload failed"
-        exit 1
-      }
-  else
-    local chunks_dir="$BACKUP_DIR/chunks"
-    mkdir -p "$chunks_dir"
-    split -b "$chunk_size" -d "$backup_file" "$chunks_dir/chunk_"
-    rm "$backup_file"
-
-    local total_chunks
-    total_chunks=$(ls -1 "$chunks_dir"/chunk_* | wc -l)
-    local current=0
-
-    for chunk in "$chunks_dir"/chunk_*; do
-      current=$((current + 1))
-      local pct=$((70 + (current * 25 / total_chunks)))
-      local checksum
-      checksum=$(sha256sum "$chunk" | cut -d' ' -f1)
-      local size
-      size=$(stat -c%s "$chunk")
-
-      report_progress "uploading" "$pct" "Uploading chunk $current/$total_chunks..."
-
-      curl -fsS --max-time 600 -X POST "$SERVER_URL/api/agents/backup/upload" \
-        -H "Content-Type: application/octet-stream" \
-        -H "X-Agent-Id: $AGENT_ID" \
-        -H "X-Agent-Token: $AGENT_TOKEN" \
-        -H "X-Snapshot-Id: $SNAPSHOT_ID" \
-        -H "X-Chunk-Index: $current" \
-        -H "X-Chunk-Total: $total_chunks" \
-        -H "X-Chunk-Checksum: $checksum" \
-        -H "X-Chunk-Size: $size" \
-        --data-binary @"$chunk" || {
-          report_progress "failed" "$pct" "Failed to upload chunk $current"
-          exit 1
-        }
-
-      rm "$chunk"
-    done
+  if [ "$total_chunks" -eq 0 ]; then
+    report_progress "failed" 65 "No data chunks created"
+    exit 1
   fi
+
+  report_progress "uploading" 68 "Compressed into $total_chunks chunks. Uploading..."
+
+  for chunk in "$chunks_dir"/chunk_*; do
+    current=$((current + 1))
+    local pct=$((68 + (current * 27 / total_chunks)))
+    local chunk_size_human
+    chunk_size_human=$(du -sh "$chunk" | cut -f1)
+
+    report_progress "uploading" "$pct" "Uploading chunk $current/$total_chunks ($chunk_size_human)..."
+
+    upload_chunk "$chunk" "$current" || {
+      report_progress "failed" "$pct" "Failed to upload chunk $current/$total_chunks"
+      exit 1
+    }
+
+    rm -f "$chunk"
+  done
 
   # Upload metadata
   if [ -d "$BACKUP_DIR/metadata" ]; then
     tar czf "$BACKUP_DIR/metadata.tar.gz" -C "$BACKUP_DIR" metadata/
-    curl -fsS --max-time 60 -X POST "$SERVER_URL/api/agents/backup/upload" \
+    curl -fsS --max-time 60 --retry 2 -X POST "$SERVER_URL/api/agents/backup/upload" \
       -H "Content-Type: application/octet-stream" \
       -H "X-Agent-Id: $AGENT_ID" \
       -H "X-Agent-Token: $AGENT_TOKEN" \
@@ -322,9 +294,7 @@ main() {
   capture_metadata
   rsync_filesystem
   export_docker_volumes
-  local backup_file
-  backup_file=$(compress_backup)
-  upload_backup "$backup_file"
+  compress_and_upload
   rotate_staging
 
   report_progress "completed" 100 "Rsync backup completed successfully"
