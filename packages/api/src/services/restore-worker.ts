@@ -1,4 +1,6 @@
 import { Client as SSHClient } from 'ssh2';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import {
   connectDB, RestoreJob, CloneSnapshot, ServerCloneConfig,
   CloudProvider, createCloudClient,
@@ -100,6 +102,7 @@ async function processRestoreJob(job: RestoreJobDoc): Promise<void> {
 
     const client = createCloudClient(provider);
     const totalChunks = snapshot.chunks.length;
+    const writtenChunks: number[] = [];
 
     for (let i = 0; i < totalChunks; i++) {
       const chunk = snapshot.chunks[i];
@@ -124,7 +127,12 @@ async function processRestoreJob(job: RestoreJobDoc): Promise<void> {
         });
       });
 
+      writtenChunks.push(i);
       appendLog(job, `Chunk ${i + 1} written to target`);
+    }
+
+    if (writtenChunks.length === 0) {
+      throw new Error('No backup chunks were downloaded — all chunks missing remoteFileId');
     }
 
     // Step 4: Reassemble chunks on target
@@ -133,11 +141,11 @@ async function processRestoreJob(job: RestoreJobDoc): Promise<void> {
     job.progress = 50;
     await job.save();
 
-    if (totalChunks === 1) {
-      await execSSH(conn, 'mv /tmp/vps-restore-chunk-0 /tmp/vps-restore-backup.tar.gz');
+    if (writtenChunks.length === 1) {
+      await execSSH(conn, `mv /tmp/vps-restore-chunk-${writtenChunks[0]} /tmp/vps-restore-backup.tar.gz`);
     } else {
-      const catCmd = Array.from({ length: totalChunks }, (_, i) => `/tmp/vps-restore-chunk-${i}`).join(' ');
-      await execSSH(conn, `cat ${catCmd} > /tmp/vps-restore-backup.tar.gz && rm -f ${catCmd}`);
+      const chunkFiles = writtenChunks.map(i => `/tmp/vps-restore-chunk-${i}`).join(' ');
+      await execSSH(conn, `cat ${chunkFiles} > /tmp/vps-restore-backup.tar.gz && rm -f ${chunkFiles}`);
     }
     appendLog(job, 'Backup reassembled on target');
 
@@ -146,8 +154,18 @@ async function processRestoreJob(job: RestoreJobDoc): Promise<void> {
     job.progress = 55;
     await job.save();
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    await execSSH(conn, `curl -fsSL ${appUrl}/scripts/restore.sh -o /tmp/vps-restore.sh && chmod +x /tmp/vps-restore.sh`);
+    // Transfer restore.sh from API server to target via SFTP
+    const restoreScriptPath = path.join(process.cwd(), 'public', 'restore.sh');
+    const restoreScript = await readFile(restoreScriptPath);
+    await new Promise<void>((resolve, reject) => {
+      conn!.sftp((err, sftp) => {
+        if (err) return reject(err);
+        const writeStream = sftp.createWriteStream('/tmp/vps-restore.sh', { mode: 0o755 });
+        writeStream.on('error', reject);
+        writeStream.on('close', () => resolve());
+        writeStream.end(restoreScript);
+      });
+    });
 
     const restoreType = snapshot.type === 'full_image' ? 'full_image' : 'rsync';
     const newHostname = job.postRestore?.newHostname || '';
