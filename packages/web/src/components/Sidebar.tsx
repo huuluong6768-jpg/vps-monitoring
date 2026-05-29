@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Server, Settings, LogOut, BookOpen, Copy, CloudUpload, FolderTree } from 'lucide-react';
+import { LayoutDashboard, Server, Settings, LogOut, BookOpen, Copy, CloudUpload, FolderTree, CalendarClock } from 'lucide-react';
 import { Logo } from './Logo';
 import { ThemeToggle } from './ThemeToggle';
 import { cn } from '@/lib/utils';
@@ -15,6 +15,7 @@ const NAV = [
   { href: '/groups', label: 'Groups', icon: FolderTree },
   { href: '/clone', label: 'Clone & DR', icon: Copy },
   { href: '/backups', label: 'Backups', icon: CloudUpload },
+  { href: '/renewals', label: 'Renewals', icon: CalendarClock },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
