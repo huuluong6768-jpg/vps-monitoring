@@ -156,13 +156,14 @@ upload_file() {
     checksum=$(sha256sum "$backup_file" | cut -d' ' -f1)
 
     curl -fsS --max-time 1800 -X POST "$SERVER_URL/api/agents/backup/upload" \
+      -H "Content-Type: application/octet-stream" \
       -H "X-Agent-Id: $AGENT_ID" \
       -H "X-Agent-Token: $AGENT_TOKEN" \
       -H "X-Snapshot-Id: $SNAPSHOT_ID" \
       -H "X-Chunk-Index: 1" \
       -H "X-Chunk-Checksum: $checksum" \
       -H "X-Chunk-Size: $file_size" \
-      -F "file=@$backup_file" || {
+      --data-binary @"$backup_file" || {
         report_progress "failed" 65 "Upload failed"
         exit 1
       }
@@ -185,13 +186,14 @@ upload_file() {
       report_progress "uploading" "$pct" "Uploading chunk $current/$total_chunks..."
 
       curl -fsS --max-time 1800 -X POST "$SERVER_URL/api/agents/backup/upload" \
+        -H "Content-Type: application/octet-stream" \
         -H "X-Agent-Id: $AGENT_ID" \
         -H "X-Agent-Token: $AGENT_TOKEN" \
         -H "X-Snapshot-Id: $SNAPSHOT_ID" \
         -H "X-Chunk-Index: $current" \
         -H "X-Chunk-Checksum: $checksum" \
         -H "X-Chunk-Size: $size" \
-        -F "file=@$chunk" || {
+        --data-binary @"$chunk" || {
           report_progress "failed" "$pct" "Failed to upload chunk $current"
           exit 1
         }
@@ -204,11 +206,12 @@ upload_file() {
   if [ -d "$BACKUP_DIR/metadata" ]; then
     tar czf "$BACKUP_DIR/metadata.tar.gz" -C "$BACKUP_DIR" metadata/
     curl -fsS --max-time 60 -X POST "$SERVER_URL/api/agents/backup/upload" \
+      -H "Content-Type: application/octet-stream" \
       -H "X-Agent-Id: $AGENT_ID" \
       -H "X-Agent-Token: $AGENT_TOKEN" \
       -H "X-Snapshot-Id: $SNAPSHOT_ID" \
       -H "X-Chunk-Index: metadata" \
-      -F "file=@$BACKUP_DIR/metadata.tar.gz" >/dev/null 2>&1 || true
+      --data-binary @"$BACKUP_DIR/metadata.tar.gz" >/dev/null 2>&1 || true
   fi
 }
 

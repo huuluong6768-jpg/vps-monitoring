@@ -337,9 +337,14 @@ router.post('/backup/upload', async (req: Request, res: Response) => {
 
   try {
     const client = createCloudClient(provider);
-    const chunks: Buffer[] = [];
-    for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    const fileData = Buffer.concat(chunks);
+    let fileData: Buffer;
+    if (Buffer.isBuffer(req.body) && req.body.length > 0) {
+      fileData = req.body;
+    } else {
+      const buffers: Buffer[] = [];
+      for await (const chunk of req) buffers.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      fileData = Buffer.concat(buffers);
+    }
 
     const folderPath = `${config.remotePath}${agent.hostname || agentId}`;
     let folderId = provider.folderId || '';
