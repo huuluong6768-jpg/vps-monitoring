@@ -20,8 +20,11 @@ export type { ICloudProvider } from './models/CloudProvider';
 export { BackupJob } from './models/BackupJob';
 export { BackupHistory } from './models/BackupHistory';
 export { CloneSnapshot } from './models/CloneSnapshot';
+export type { ICloneSnapshot } from './models/CloneSnapshot';
 export { RestoreJob } from './models/RestoreJob';
+export type { IRestoreJob } from './models/RestoreJob';
 export { ServerCloneConfig } from './models/ServerCloneConfig';
+export type { IServerCloneConfig } from './models/ServerCloneConfig';
 export { ServerGroup } from './models/ServerGroup';
 
 // Cloud clients

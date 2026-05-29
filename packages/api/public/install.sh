@@ -435,11 +435,105 @@ while true; do
     -H 'Content-Type: application/json' \
     -d "$PAYLOAD" >/dev/null 2>&1 || true
 
+  # Poll for clone/backup tasks every cycle
+  CLONE_RESP=$(curl -fsS --max-time 5 \
+    "$SERVER_URL/api/agents/clone/pending?agentId=$AGENT_ID&token=$AGENT_TOKEN" 2>/dev/null || true)
+  if [ -n "$CLONE_RESP" ]; then
+    TASK_CNT=$(echo "$CLONE_RESP" | jq '.tasks | length' 2>/dev/null || echo 0)
+    if [ "$TASK_CNT" -gt 0 ]; then
+      /opt/vps-monitor-agent/clone-runner.sh &
+    fi
+  fi
+
   sleep "$INTERVAL"
 done
 AGENT_EOF
 
 chmod +x "$AGENT_SCRIPT"
+
+# ---- Download backup scripts ------------------------------------------------
+log "Downloading backup scripts…"
+for SCRIPT_NAME in full-image-backup.sh rsync-backup.sh restore.sh; do
+  curl -fsSL --max-time 30 "$SERVER_URL/scripts/$SCRIPT_NAME" \
+    -o "$INSTALL_DIR/$SCRIPT_NAME" 2>/dev/null || true
+  [ -f "$INSTALL_DIR/$SCRIPT_NAME" ] && chmod +x "$INSTALL_DIR/$SCRIPT_NAME"
+done
+ok "Backup scripts installed."
+
+# ---- Write clone task runner ------------------------------------------------
+cat > "$INSTALL_DIR/clone-runner.sh" <<'CLONE_EOF'
+#!/usr/bin/env bash
+# Polls the dashboard for pending clone/backup tasks and executes them.
+set -u
+
+CONFIG_FILE="/opt/vps-monitor-agent/agent.conf"
+# shellcheck disable=SC1090
+. "$CONFIG_FILE"
+
+LOCK_FILE="/tmp/vps-clone-runner.lock"
+
+# Prevent concurrent runs
+if [ -f "$LOCK_FILE" ]; then
+  LOCK_PID=$(cat "$LOCK_FILE" 2>/dev/null)
+  if kill -0 "$LOCK_PID" 2>/dev/null; then
+    exit 0
+  fi
+  rm -f "$LOCK_FILE"
+fi
+echo $$ > "$LOCK_FILE"
+trap 'rm -f "$LOCK_FILE"' EXIT
+
+RESPONSE=$(curl -fsS --max-time 10 \
+  "$SERVER_URL/api/agents/clone/pending?agentId=$AGENT_ID&token=$AGENT_TOKEN" 2>/dev/null || true)
+
+[ -z "$RESPONSE" ] && exit 0
+
+TASK_COUNT=$(echo "$RESPONSE" | jq '.tasks | length' 2>/dev/null || echo 0)
+[ "$TASK_COUNT" -eq 0 ] && exit 0
+
+SNAPSHOT_ID=$(echo "$RESPONSE" | jq -r '.tasks[0].snapshotId')
+TASK_TYPE=$(echo "$RESPONSE" | jq -r '.tasks[0].type')
+
+echo "[$(date -Iseconds)] Clone task: type=$TASK_TYPE snapshot=$SNAPSHOT_ID"
+
+INSTALL_DIR="/opt/vps-monitor-agent"
+
+case "$TASK_TYPE" in
+  full_image)
+    if [ -x "$INSTALL_DIR/full-image-backup.sh" ]; then
+      bash "$INSTALL_DIR/full-image-backup.sh" "$SNAPSHOT_ID"
+    else
+      echo "ERROR: full-image-backup.sh not found"
+      curl -fsS --max-time 10 -X POST "$SERVER_URL/api/agents/backup/status" \
+        -H 'Content-Type: application/json' \
+        -d "$(jq -n \
+          --arg agentId "$AGENT_ID" \
+          --arg token "$AGENT_TOKEN" \
+          --arg snapshotId "$SNAPSHOT_ID" \
+          '{agentId:$agentId,token:$token,snapshotId:$snapshotId,status:"failed",progress:0,message:"full-image-backup.sh not found on agent"}')"
+    fi
+    ;;
+  rsync_full|rsync_incremental)
+    if [ -x "$INSTALL_DIR/rsync-backup.sh" ]; then
+      bash "$INSTALL_DIR/rsync-backup.sh" "$SNAPSHOT_ID"
+    else
+      echo "ERROR: rsync-backup.sh not found"
+      curl -fsS --max-time 10 -X POST "$SERVER_URL/api/agents/backup/status" \
+        -H 'Content-Type: application/json' \
+        -d "$(jq -n \
+          --arg agentId "$AGENT_ID" \
+          --arg token "$AGENT_TOKEN" \
+          --arg snapshotId "$SNAPSHOT_ID" \
+          '{agentId:$agentId,token:$token,snapshotId:$snapshotId,status:"failed",progress:0,message:"rsync-backup.sh not found on agent"}')"
+    fi
+    ;;
+  *)
+    echo "Unknown task type: $TASK_TYPE"
+    ;;
+esac
+CLONE_EOF
+chmod +x "$INSTALL_DIR/clone-runner.sh"
+ok "Clone task runner installed."
 
 # ---- Write uninstall script -------------------------------------------------
 cat > "$UNINSTALL_SCRIPT" <<'UNI_EOF'
