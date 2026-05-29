@@ -3,6 +3,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 
 import { TelegramBot, getAppSettings } from '@vps-monitoring/shared';
+import { startRestoreWorker } from './services/restore-worker';
 import agentsRouter from './routes/agents';
 import authRouter from './routes/auth';
 import cloudRouter from './routes/cloud';
@@ -60,6 +61,9 @@ app.listen(PORT, async () => {
   } catch (e) {
     console.error('[API] Failed to start Telegram bot:', e);
   }
+
+  // Start restore worker — polls for pending restore jobs
+  startRestoreWorker();
 });
 
 export default app;
