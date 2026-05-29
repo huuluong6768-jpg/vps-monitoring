@@ -9,7 +9,7 @@ router.get('/', async (req: Request, res: Response) => {
   const interval = (req.query.interval as string) ?? '15';
   const baseUrl = env.APP_URL.replace(/\/$/, '');
 
-  const scriptPath = path.join(process.cwd(), 'public', 'install.sh');
+  const scriptPath = path.resolve(__dirname, '../../public/install.sh');
   let template: string;
   try {
     template = await readFile(scriptPath, 'utf8');

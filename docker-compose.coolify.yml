@@ -45,6 +45,7 @@ services:
     depends_on:
       - api
     environment:
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/vps-monitoring}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       API_URL: http://api:4000
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
