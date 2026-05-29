@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# VPS Monitor Agent — Full disk image backup
-# Creates a compressed disk image of the entire server.
-# Usage: called by the agent when a full_image backup task is pending.
+# VPS Monitor Agent — Full disk image backup (streaming chunked upload)
+# Pipes dd → compress → split into 50MB chunks → upload each immediately.
+# Never stores the full image on disk — only 1 chunk at a time.
 # ==============================================================================
 set -euo pipefail
 
@@ -12,7 +12,7 @@ CONFIG_FILE="/opt/vps-monitor-agent/agent.conf"
 
 SNAPSHOT_ID="${1:?Usage: full-image-backup.sh <snapshot_id>}"
 BACKUP_DIR="/tmp/vps-backup-$$"
-CHUNK_SIZE=$((1024 * 1024 * 1024))  # 1GB chunks
+CHUNK_SIZE=$((50 * 1024 * 1024))  # 50MB chunks
 
 report_progress() {
   local status="$1" progress="$2" message="$3"
@@ -27,6 +27,24 @@ report_progress() {
       --arg message "$message" \
       '{agentId:$agentId,token:$token,snapshotId:$snapshotId,status:$status,progress:$progress,message:$message}')" \
     >/dev/null 2>&1 || true
+}
+
+upload_chunk() {
+  local chunk_file="$1" chunk_index="$2"
+  local checksum size
+  checksum=$(sha256sum "$chunk_file" | cut -d' ' -f1)
+  size=$(stat -c%s "$chunk_file")
+
+  curl -fsS --max-time 300 --retry 3 --retry-delay 5 \
+    -X POST "$SERVER_URL/api/agents/backup/upload" \
+    -H "Content-Type: application/octet-stream" \
+    -H "X-Agent-Id: $AGENT_ID" \
+    -H "X-Agent-Token: $AGENT_TOKEN" \
+    -H "X-Snapshot-Id: $SNAPSHOT_ID" \
+    -H "X-Chunk-Index: $chunk_index" \
+    -H "X-Chunk-Checksum: $checksum" \
+    -H "X-Chunk-Size: $size" \
+    --data-binary @"$chunk_file"
 }
 
 pre_backup_dumps() {
@@ -109,103 +127,73 @@ capture_metadata() {
     >/dev/null 2>&1 || true
 }
 
-create_disk_image() {
+create_and_upload_image() {
   local disk
   disk=$(findmnt -n -o SOURCE / | sed 's/[0-9]*$//' | sed 's/p$//')
   [ -z "$disk" ] && disk="/dev/vda"
   [ ! -b "$disk" ] && disk="/dev/sda"
 
-  local img_file="$BACKUP_DIR/server-full.img.gz"
+  report_progress "creating_image" 15 "Streaming disk image from $disk in 50MB chunks..."
 
-  report_progress "creating_image" 15 "Creating disk image from $disk..."
+  local chunks_dir="$BACKUP_DIR/chunks"
+  mkdir -p "$chunks_dir"
 
+  # Choose compressor
+  local compress_cmd="gzip -1"
+  command -v pigz >/dev/null 2>&1 && compress_cmd="pigz -1 -p $(nproc)"
+
+  # Optionally freeze filesystem for consistency
   local frozen=false
   if command -v fsfreeze >/dev/null 2>&1; then
     fsfreeze --freeze / 2>/dev/null && frozen=true || true
   fi
 
-  local compress_cmd="gzip -1"
-  command -v pigz >/dev/null 2>&1 && compress_cmd="pigz -1 -p $(nproc)"
-  command -v zstd >/dev/null 2>&1 && compress_cmd="zstd -1 -T0 -o $img_file" && img_file="$BACKUP_DIR/server-full.img.zst"
-
-  if [ "$compress_cmd" = "zstd -1 -T0 -o $img_file" ]; then
-    dd if="$disk" bs=4M 2>/dev/null | zstd -1 -T0 > "$img_file"
-  else
-    dd if="$disk" bs=4M 2>/dev/null | $compress_cmd > "$img_file"
-  fi
+  # Stream: dd → compress → split into 50MB chunk files
+  # This never creates the full image on disk — only 50MB chunks
+  dd if="$disk" bs=4M 2>/dev/null | $compress_cmd | split -b "$CHUNK_SIZE" -d -a 4 - "$chunks_dir/chunk_"
+  local pipe_status=${PIPESTATUS[0]}
 
   if $frozen; then
     fsfreeze --unfreeze / 2>/dev/null || true
   fi
 
-  local file_size
-  file_size=$(stat -c%s "$img_file" 2>/dev/null || echo 0)
-  report_progress "compressing" 60 "Disk image created: $(du -sh "$img_file" | cut -f1)"
-
-  echo "$img_file"
-}
-
-upload_file() {
-  local backup_file="$1"
-  local file_size
-  file_size=$(stat -c%s "$backup_file" 2>/dev/null || echo 0)
-
-  if [ "$file_size" -le "$CHUNK_SIZE" ]; then
-    report_progress "uploading" 65 "Uploading image ($(du -sh "$backup_file" | cut -f1))..."
-    local checksum
-    checksum=$(sha256sum "$backup_file" | cut -d' ' -f1)
-
-    curl -fsS --max-time 1800 -X POST "$SERVER_URL/api/agents/backup/upload" \
-      -H "Content-Type: application/octet-stream" \
-      -H "X-Agent-Id: $AGENT_ID" \
-      -H "X-Agent-Token: $AGENT_TOKEN" \
-      -H "X-Snapshot-Id: $SNAPSHOT_ID" \
-      -H "X-Chunk-Index: 1" \
-      -H "X-Chunk-Checksum: $checksum" \
-      -H "X-Chunk-Size: $file_size" \
-      --data-binary @"$backup_file" || {
-        report_progress "failed" 65 "Upload failed"
-        exit 1
-      }
-  else
-    local chunks_dir="$BACKUP_DIR/chunks"
-    mkdir -p "$chunks_dir"
-    split -b "$CHUNK_SIZE" -d "$backup_file" "$chunks_dir/chunk_"
-    rm "$backup_file"
-
-    local total_chunks current=0
-    total_chunks=$(ls -1 "$chunks_dir"/chunk_* | wc -l)
-
-    for chunk in "$chunks_dir"/chunk_*; do
-      current=$((current + 1))
-      local pct=$((60 + (current * 35 / total_chunks)))
-      local checksum size
-      checksum=$(sha256sum "$chunk" | cut -d' ' -f1)
-      size=$(stat -c%s "$chunk")
-
-      report_progress "uploading" "$pct" "Uploading chunk $current/$total_chunks..."
-
-      curl -fsS --max-time 1800 -X POST "$SERVER_URL/api/agents/backup/upload" \
-        -H "Content-Type: application/octet-stream" \
-        -H "X-Agent-Id: $AGENT_ID" \
-        -H "X-Agent-Token: $AGENT_TOKEN" \
-        -H "X-Snapshot-Id: $SNAPSHOT_ID" \
-        -H "X-Chunk-Index: $current" \
-        -H "X-Chunk-Checksum: $checksum" \
-        -H "X-Chunk-Size: $size" \
-        --data-binary @"$chunk" || {
-          report_progress "failed" "$pct" "Failed to upload chunk $current"
-          exit 1
-        }
-
-      rm "$chunk"
-    done
+  if [ "$pipe_status" -ne 0 ]; then
+    report_progress "failed" 20 "Disk read failed"
+    exit 1
   fi
+
+  # Count and upload chunks one by one (delete after upload to save space)
+  local total_chunks current=0
+  total_chunks=$(ls -1 "$chunks_dir"/chunk_* 2>/dev/null | wc -l)
+
+  if [ "$total_chunks" -eq 0 ]; then
+    report_progress "failed" 25 "No data chunks created"
+    exit 1
+  fi
+
+  report_progress "uploading" 40 "Disk image split into $total_chunks chunks. Uploading..."
+
+  for chunk in "$chunks_dir"/chunk_*; do
+    current=$((current + 1))
+    local pct=$((40 + (current * 55 / total_chunks)))
+    local chunk_size_human
+    chunk_size_human=$(du -sh "$chunk" | cut -f1)
+
+    report_progress "uploading" "$pct" "Uploading chunk $current/$total_chunks ($chunk_size_human)..."
+
+    upload_chunk "$chunk" "$current" || {
+      report_progress "failed" "$pct" "Failed to upload chunk $current/$total_chunks"
+      exit 1
+    }
+
+    # Delete chunk after successful upload to free disk space
+    rm -f "$chunk"
+  done
 
   # Upload metadata
   if [ -d "$BACKUP_DIR/metadata" ]; then
     tar czf "$BACKUP_DIR/metadata.tar.gz" -C "$BACKUP_DIR" metadata/
-    curl -fsS --max-time 60 -X POST "$SERVER_URL/api/agents/backup/upload" \
+    curl -fsS --max-time 60 --retry 2 -X POST "$SERVER_URL/api/agents/backup/upload" \
       -H "Content-Type: application/octet-stream" \
       -H "X-Agent-Id: $AGENT_ID" \
       -H "X-Agent-Token: $AGENT_TOKEN" \
@@ -227,9 +215,7 @@ main() {
 
   pre_backup_dumps
   capture_metadata
-  local img_file
-  img_file=$(create_disk_image)
-  upload_file "$img_file"
+  create_and_upload_image
 
   report_progress "completed" 100 "Full disk image backup completed successfully"
 }
