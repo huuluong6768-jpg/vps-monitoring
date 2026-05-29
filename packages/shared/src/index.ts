@@ -26,6 +26,8 @@ export type { IRestoreJob } from './models/RestoreJob';
 export { ServerCloneConfig } from './models/ServerCloneConfig';
 export type { IServerCloneConfig } from './models/ServerCloneConfig';
 export { ServerGroup } from './models/ServerGroup';
+export { DirectCloneJob } from './models/DirectCloneJob';
+export type { IDirectCloneJob } from './models/DirectCloneJob';
 
 // Cloud clients
 export { createCloudClient } from './cloud';

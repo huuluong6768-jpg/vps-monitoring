@@ -5,6 +5,7 @@ import path from 'node:path';
 
 import { TelegramBot, getAppSettings } from '@vps-monitoring/shared';
 import { startRestoreWorker } from './services/restore-worker';
+import { startDirectCloneWorker } from './services/direct-clone-worker';
 import agentsRouter from './routes/agents';
 import authRouter from './routes/auth';
 import cloudRouter from './routes/cloud';
@@ -65,6 +66,9 @@ app.listen(PORT, async () => {
 
   // Start restore worker — polls for pending restore jobs
   startRestoreWorker();
+
+  // Start direct clone worker — polls for pending direct clone jobs
+  startDirectCloneWorker();
 });
 
 export default app;

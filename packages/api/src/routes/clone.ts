@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { connectDB, ServerCloneConfig, CloneSnapshot, RestoreJob } from '@vps-monitoring/shared';
+import { connectDB, ServerCloneConfig, CloneSnapshot, RestoreJob, DirectCloneJob, Agent } from '@vps-monitoring/shared';
 import { requireAuth } from '../middleware/auth';
 
 const router = Router();
@@ -227,6 +227,116 @@ router.post('/restore/:id', requireAuth, async (req: Request, res: Response) => 
 
   job.status = 'failed'; job.errorMessage = 'Cancelled by user'; job.completedAt = new Date();
   await job.save();
+  res.json({ ok: true });
+});
+
+// --- Direct Clone (Server A → Server B) ---
+const createDirectCloneSchema = z.object({
+  sourceServer: z.object({
+    agentId: z.string().optional(),
+    ip: z.string().min(1),
+    port: z.number().int().min(1).max(65535).default(22),
+    username: z.string().default('root'),
+    sshPrivateKey: z.string().optional(),
+    password: z.string().optional(),
+  }),
+  targetServer: z.object({
+    ip: z.string().min(1),
+    port: z.number().int().min(1).max(65535).default(22),
+    username: z.string().default('root'),
+    sshPrivateKey: z.string().optional(),
+    password: z.string().optional(),
+  }),
+  mode: z.enum(['full', 'incremental']).default('full'),
+  options: z.object({
+    syncSystemConfigs: z.boolean().default(true),
+    syncDocker: z.boolean().default(true),
+    syncDockerVolumes: z.boolean().default(true),
+    syncUserData: z.boolean().default(true),
+    syncDatabases: z.boolean().default(true),
+    customPaths: z.array(z.string()).default([]),
+    excludePaths: z.array(z.string()).default([]),
+    postCloneCommands: z.array(z.string()).default([]),
+    regenerateSshHostKeys: z.boolean().default(true),
+    restartDocker: z.boolean().default(true),
+    restartCoolify: z.boolean().default(false),
+  }).optional(),
+});
+
+router.get('/direct', requireAuth, async (_req: Request, res: Response) => {
+  await connectDB();
+  const jobs = await DirectCloneJob.find({}).sort({ createdAt: -1 }).limit(50).lean();
+  // Strip SSH credentials from response
+  const safe = jobs.map((j) => ({
+    ...j,
+    sourceServer: { ...j.sourceServer, sshPrivateKey: undefined, password: undefined },
+    targetServer: { ...j.targetServer, sshPrivateKey: undefined, password: undefined },
+  }));
+  res.json({ jobs: safe });
+});
+
+router.post('/direct', requireAuth, async (req: Request, res: Response) => {
+  const parsed = createDirectCloneSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() }); return; }
+
+  await connectDB();
+
+  // If agentId provided, look up IP from agent
+  const src = parsed.data.sourceServer;
+  if (src.agentId && !src.ip) {
+    const agent = await Agent.findOne({ agentId: src.agentId });
+    if (agent) {
+      src.ip = agent.publicIp || agent.privateIp || src.ip;
+    }
+  }
+
+  const job = await DirectCloneJob.create({
+    sourceServer: src,
+    targetServer: parsed.data.targetServer,
+    mode: parsed.data.mode,
+    options: parsed.data.options || {},
+  });
+
+  res.json({
+    ok: true,
+    job: {
+      _id: job._id, mode: job.mode, status: job.status, progress: job.progress,
+      sourceServer: { ip: job.sourceServer.ip, agentId: job.sourceServer.agentId },
+      targetServer: { ip: job.targetServer.ip },
+    },
+  });
+});
+
+router.get('/direct/:id', requireAuth, async (req: Request, res: Response) => {
+  await connectDB();
+  const job = await DirectCloneJob.findById(req.params.id).lean();
+  if (!job) { res.status(404).json({ error: 'Not found' }); return; }
+  res.json({
+    job: {
+      ...job,
+      sourceServer: { ...job.sourceServer, sshPrivateKey: undefined, password: undefined },
+      targetServer: { ...job.targetServer, sshPrivateKey: undefined, password: undefined },
+    },
+  });
+});
+
+router.post('/direct/:id', requireAuth, async (req: Request, res: Response) => {
+  const action = req.query.action as string;
+  if (action !== 'cancel') { res.status(400).json({ error: 'Unknown action' }); return; }
+
+  await connectDB();
+  const job = await DirectCloneJob.findById(req.params.id);
+  if (!job) { res.status(404).json({ error: 'Not found' }); return; }
+  if (job.status === 'completed' || job.status === 'failed') { res.status(400).json({ error: 'Job already finished' }); return; }
+
+  job.status = 'failed'; job.errorMessage = 'Cancelled by user'; job.completedAt = new Date();
+  await job.save();
+  res.json({ ok: true });
+});
+
+router.delete('/direct/:id', requireAuth, async (req: Request, res: Response) => {
+  await connectDB();
+  await DirectCloneJob.findByIdAndDelete(req.params.id);
   res.json({ ok: true });
 });
 
