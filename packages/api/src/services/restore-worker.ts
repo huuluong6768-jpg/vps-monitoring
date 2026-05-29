@@ -234,11 +234,13 @@ export function startRestoreWorker(intervalMs = 15000): void {
   const poll = async () => {
     try {
       await connectDB();
-      const pendingJob = await RestoreJob.findOne({ status: 'pending' }).sort({ createdAt: 1 });
+      const pendingJob = await RestoreJob.findOneAndUpdate(
+        { status: 'pending' },
+        { $set: { status: 'downloading', startedAt: new Date() } },
+        { sort: { createdAt: 1 }, new: true },
+      );
       if (pendingJob) {
         console.log(`[RestoreWorker] Processing restore job ${pendingJob._id}`);
-        pendingJob.startedAt = new Date();
-        await pendingJob.save();
         await processRestoreJob(pendingJob as unknown as RestoreJobDoc);
       }
     } catch (err) {
