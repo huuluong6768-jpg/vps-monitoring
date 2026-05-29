@@ -54,6 +54,8 @@ CMD ["npx", "tsx", "packages/api/src/index.ts"]
 FROM build-shared AS build-web
 COPY packages/web/ ./packages/web/
 ENV NEXT_TELEMETRY_DISABLED=1 NODE_OPTIONS=--max-old-space-size=4096
+ARG API_URL=http://api:4000
+ENV API_URL=${API_URL}
 RUN npm run build:web
 
 # --- Stage 5: Web runner ---
