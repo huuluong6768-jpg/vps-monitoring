@@ -454,7 +454,7 @@ chmod +x "$AGENT_SCRIPT"
 # ---- Download backup scripts ------------------------------------------------
 log "Downloading backup scripts…"
 for SCRIPT_NAME in full-image-backup.sh rsync-backup.sh restore.sh; do
-  curl -fsSL --max-time 30 "$SERVER_URL/scripts/$SCRIPT_NAME" \
+  curl -fsSL --max-time 30 "$SERVER_URL/api/scripts/$SCRIPT_NAME" \
     -o "$INSTALL_DIR/$SCRIPT_NAME" 2>/dev/null || true
   [ -f "$INSTALL_DIR/$SCRIPT_NAME" ] && chmod +x "$INSTALL_DIR/$SCRIPT_NAME"
 done

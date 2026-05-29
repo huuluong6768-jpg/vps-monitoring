@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import path from 'node:path';
 
 import { TelegramBot, getAppSettings } from '@vps-monitoring/shared';
 import { startRestoreWorker } from './services/restore-worker';
@@ -26,8 +27,8 @@ app.use(cookieParser());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.raw({ type: 'application/octet-stream', limit: '2gb' }));
 
-// Serve agent scripts as static files
-app.use('/scripts', express.static('public'));
+// Serve agent scripts as static files (under /api/ so the web proxy forwards them)
+app.use('/api/scripts', express.static(path.resolve(__dirname, '../public')));
 
 // Routes
 app.use('/api/agents', agentsRouter);

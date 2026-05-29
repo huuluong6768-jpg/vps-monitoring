@@ -155,7 +155,7 @@ async function processRestoreJob(job: RestoreJobDoc): Promise<void> {
     await job.save();
 
     // Transfer restore.sh from API server to target via SFTP
-    const restoreScriptPath = path.join(process.cwd(), 'public', 'restore.sh');
+    const restoreScriptPath = path.resolve(__dirname, '../../public/restore.sh');
     const restoreScript = await readFile(restoreScriptPath);
     await new Promise<void>((resolve, reject) => {
       conn!.sftp((err, sftp) => {
