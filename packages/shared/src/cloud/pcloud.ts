@@ -48,13 +48,28 @@ export class PCloudClient implements ICloudClient {
   }
 
   async createFolder(name: string, parentId?: string): Promise<string> {
-    const data = await this.api('createfolderifnotexists', {
-      folderid: parentId || '0',
-      name,
-    });
-    if (data.result !== 0) throw new Error((data.error as string) || 'Failed to create folder');
-    const meta = data.metadata as Record<string, unknown>;
-    return String(meta.folderid);
+    if (parentId) {
+      const data = await this.api('createfolderifnotexists', {
+        folderid: parentId,
+        name,
+      });
+      if (data.result !== 0) throw new Error((data.error as string) || 'Failed to create folder');
+      const meta = data.metadata as Record<string, unknown>;
+      return String(meta.folderid);
+    }
+    // For paths like "/VPS-Backups/hostname", create each level
+    const parts = name.replace(/^\//, '').split('/').filter(Boolean);
+    let currentFolderId = '0';
+    for (const part of parts) {
+      const data = await this.api('createfolderifnotexists', {
+        folderid: currentFolderId,
+        name: part,
+      });
+      if (data.result !== 0) throw new Error((data.error as string) || `Failed to create folder: ${part}`);
+      const meta = data.metadata as Record<string, unknown>;
+      currentFolderId = String(meta.folderid);
+    }
+    return currentFolderId;
   }
 
   async uploadFile(

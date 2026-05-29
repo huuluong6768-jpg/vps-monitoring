@@ -347,12 +347,7 @@ router.post('/backup/upload', async (req: Request, res: Response) => {
     }
 
     const folderPath = `${config.remotePath}${agent.hostname || agentId}`;
-    let folderId = provider.folderId || '';
-    if (!folderId) {
-      folderId = await client.createFolder(folderPath);
-      provider.folderId = folderId;
-      await provider.save();
-    }
+    const folderId = await client.createFolder(folderPath);
 
     const fileName = chunkIndex === 'metadata' ? `${snapshot._id}_metadata.tar.gz`
       : chunkIndex === 'checksums' ? `${snapshot._id}_checksums.sha256`
